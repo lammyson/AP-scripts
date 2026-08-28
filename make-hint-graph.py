@@ -3,28 +3,39 @@ import graphviz
 import json
 from pathlib import Path
 
-parser = argparse.ArgumentParser(description="Make a hint graph of a room's data. Graphs all hints by default.", formatter_class=argparse.RawTextHelpFormatter)
-parser.add_argument("-f", "--data-folder", required=True, type=Path, metavar="FOLDER", help="Folder containing room data retrieved by get-room-data.py")
-parser.add_argument("-o", "--output-filename", metavar="FILE", help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.png")
+# TODO - add --depth option
+# - maybe also --parent-depth and --child-depth
 
-choices_desc = {
-   "parents": "Show all slots that the given slot depends on",
-   "children": "Show all slots that depend on the given slot",
-   "both": "Show both parents and children",
-}
+parser = argparse.ArgumentParser(description="Make a hint graph of a room's data. Graphs all hints by default.", formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument(
+   "-f", "--data-folder",
+   required=True,
+   type=Path,
+   metavar="FOLDER",
+   help="Folder containing room data retrieved by get-room-data.py")
+parser.add_argument(
+   "-o", "--output-filename",
+   metavar="FILE",
+   help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.png")
 
 hint_chain_group = parser.add_argument_group("Hint chain options")
 hint_chain_group.add_argument(
    "-hc", "--hint-chain-mode",
    choices=["parents", "children", "both"],
-   # metavar="MODE",
-   help="parents - Show all slots that the given slot depends on\nchildren - Show all slots that depend on the given slot\nboth - show both parents and children")
+   help=
+"""Requires setting one of the slot name options. Choices:
+  parents - Show all slots that the given slot depends on
+  children - Show all slots that depend on the given slot
+  both - show both parents and children
+""")
 
-node_select_arg_group = parser.add_argument_group("Slot name options", description="Use these arguments to select a specific slot/alias. Requires setting -hc|--hint-chain-mode") \
-   .add_mutually_exclusive_group(required=False)
-node_select_arg_group.add_argument("--slot-name", metavar="NAME", help="Slot name")
-node_select_arg_group.add_argument("--alias", help="Alias of the slot")
-node_select_arg_group.add_argument("--slot-id", type=int, metavar="ID", help="Id (integer) of the slot. Can be found on the room page")
+slot_select_group = parser.add_argument_group(
+   "Slot name options",
+   description="Use these arguments to select a specific slot/alias. Requires setting -hc|--hint-chain-mode") \
+      .add_mutually_exclusive_group(required=False)
+slot_select_group.add_argument("--slot-name", metavar="NAME", help="Slot name")
+slot_select_group.add_argument("--alias", help="Alias of the slot")
+slot_select_group.add_argument("--slot-id", type=int, metavar="ID", help="Id (integer) of the slot. Can be found on the room page")
 
 args = parser.parse_args()
 
@@ -53,9 +64,6 @@ elif args.hint_chain_mode == "both":
 no_slot_name = args.slot_name == None and args.alias == None and args.slot_id == None
 if args.hint_chain_mode and no_slot_name:
    parser.error("One of the arguments --slot-name --alias --slot-id is required when using -hc|--hint-chain-mode")
-
-if not no_slot_name and not args.hint_chain_mode:
-   parser.error("One of the arguments --slot-name --alias --slot-id was provided without -hc|--hint-chain-mode")
 
 # TODO - Filter out nodes with >= some number of hints to find - Make this configurable
 high_hint_count = 2147483647
@@ -284,6 +292,10 @@ if show_parent_nodes:
 # Create the graph
 print("Creating hint graph")
 dot = graphviz.Digraph('hint-graph', graph_attr={'rankdir':'LR'})
+
+# If a specific slot was provided, color it red
+if slot_id:
+   dot.node(f"{hints_processed[slot_id-1]["player_num"]}", hints_processed[slot_id-1]["node_name"], color="red", fillcolor="red", style="filled", fontcolor="white")
 
 # Add all hints
 for index in visited_nodes:
