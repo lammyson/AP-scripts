@@ -4,10 +4,6 @@ import json
 from pathlib import Path
 import requests
 
-# Chaos Async 2 "eAI9zbMNRpqFBBAyvCTeaQ"
-# The Archipelago of Questionable Decisions "rc6bMdQiTvCwN7WBN5XOcg"
-# Princess Snivy's Personal Hell: Trigger Happy "E6WqOA-1T8-iemShH8cYyQ"
-
 def download_api_single(
       api_name: str,
       endpoint: str,
