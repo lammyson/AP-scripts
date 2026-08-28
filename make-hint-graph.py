@@ -3,10 +3,7 @@ import graphviz
 import json
 from pathlib import Path
 
-# TODO - add --depth option
-# - maybe also --parent-depth and --child-depth
-
-parser = argparse.ArgumentParser(description="Make a hint graph of a room's data. Graphs all hints by default.", formatter_class=argparse.RawTextHelpFormatter)
+parser = argparse.ArgumentParser(description="Make a hint graph of a room's hints. Graphs all hints by default.", formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument(
    "-f", "--data-folder",
    required=True,
@@ -17,34 +14,70 @@ parser.add_argument(
    "-o", "--output-filename",
    metavar="FILE",
    help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.png")
-
-hint_chain_group = parser.add_argument_group("Hint chain options")
-hint_chain_group.add_argument(
-   "-hc", "--hint-chain-mode",
-   choices=["parents", "children", "both"],
-   help=
-"""Requires setting one of the slot name options. Choices:
-  parents - Show all slots that the given slot depends on
-  children - Show all slots that depend on the given slot
-  both - show both parents and children
-""")
+parser.add_argument(
+   "-d", "--debug",
+   default=False,
+   action="store_true",
+   help="Print debug"
+)
 
 slot_select_group = parser.add_argument_group(
    "Slot name options",
-   description="Use these arguments to select a specific slot/alias. Requires setting -hc|--hint-chain-mode") \
-      .add_mutually_exclusive_group(required=False)
-slot_select_group.add_argument("--slot-name", metavar="NAME", help="Slot name")
-slot_select_group.add_argument("--alias", help="Alias of the slot")
-slot_select_group.add_argument("--slot-id", type=int, metavar="ID", help="Id (integer) of the slot. Can be found on the room page")
+   description=
+"""Use these arguments to select a specific slot/alias.
+Used to highlight a specific slot red.
+When combined with a hint mode option, it will be the slot that the hint chain is centered around."""
+      ).add_mutually_exclusive_group(required=False)
+slot_select_group.add_argument(
+   "--slot-name",
+   metavar="NAME",
+   help="Slot name")
+slot_select_group.add_argument(
+   "--alias",
+   help="Alias of the slot")
+slot_select_group.add_argument(
+   "--slot-id",
+   type=int,
+   metavar="ID",
+   help="Id (integer) of the slot. Can be found on the room page")
+
+hint_chain_group = parser.add_argument_group(
+   "Hint chain options",
+   description=
+"""Requires a slot name option.""")
+hint_chain_group.add_argument(
+   "--depth",
+   metavar="DEPTH",
+   type=int,
+   help="Sets how deep in the hint chain to display in both directions"
+)
+hint_chain_group.add_argument(
+   "--parent-depth",
+   metavar="DEPTH",
+   type=int,
+   help="Sets how deep in the hint chain to display for slots that you depend on"
+)
+hint_chain_group.add_argument(
+   "--child-depth",
+   metavar="DEPTH",
+   type=int,
+   help="Sets how deep in the hint chain to display for slots that depend on you"
+)
 
 args = parser.parse_args()
+debug=args.debug
 
-# print(f"data-folder={args.data_folder}")
-# print(f"output-filename={args.output_filename}")
-# print(f"hint-chain-mode={args.hint_chain_mode}")
-# print(f"slot-name={args.slot_name}")
-# print(f"alias={args.alias}")
-# print(f"slot-id={args.slot_id}")
+if debug:
+   print("Just after argument parsing")
+   print(f"\tdata-folder={args.data_folder}")
+   print(f"\toutput-filename={args.output_filename}")
+   print(f"\tslot-name={args.slot_name}")
+   print(f"\talias={args.alias}")
+   print(f"\tslot-id={args.slot_id}")
+   print(f"\tdepth={args.depth}")
+   print(f"\tparent_depth={args.parent_depth}")
+   print(f"\tchild_depth={args.parent_depth}")
+   print("")
 
 if not args.data_folder.exists():
    parser.error(f"Data folder={args.data_folder} does not exist")
@@ -53,17 +86,25 @@ if not Path(args.data_folder).is_dir():
 
 show_parent_nodes = False
 show_child_nodes = False
-if args.hint_chain_mode == "parents":
-   show_parent_nodes = True
-elif args.hint_chain_mode == "children":
-   show_child_nodes = True
-elif args.hint_chain_mode == "both":
-   show_parent_nodes = True
-   show_child_nodes = True
+parent_depth=2147483647
+child_depth=2147483647
 
+if args.depth:
+   show_parent_nodes = True
+   parent_depth=args.depth
+   show_child_nodes = True
+   child_depth=args.depth
+if args.parent_depth:
+   show_parent_nodes = True
+   parent_depth=args.parent_depth
+if args.child_depth:
+   show_child_nodes = True
+   child_depth=args.child_depth
+
+no_depth_option = args.depth == None and args.parent_depth == None and args.child_depth == None
 no_slot_name = args.slot_name == None and args.alias == None and args.slot_id == None
-if args.hint_chain_mode and no_slot_name:
-   parser.error("One of the arguments --slot-name --alias --slot-id is required when using -hc|--hint-chain-mode")
+if no_depth_option and no_slot_name:
+   parser.error("One of the arguments --slot-name|--alias|--slot-id is required when using --depth|--parent-depth|--child-depth")
 
 # TODO - Filter out nodes with >= some number of hints to find - Make this configurable
 high_hint_count = 2147483647
@@ -131,17 +172,29 @@ if args.output_filename != None:
 else:
    output_filename = Path(f"{fetch_time}")
 
+if debug:
+   print("Just after argument validation")
+   print(f"\tdata-folder={data_folder}")
+   print(f"\toutput-filename={output_filename}")
+   print(f"\tslot-name={slot_name}")
+   print(f"\talias={alias}")
+   print(f"\tslot-id={slot_id}")
+   print(f"\tshow_parent_nodes={show_parent_nodes}")
+   print(f"\tparent_depth={parent_depth}")
+   print(f"\tshow_child_nodes={show_child_nodes}")
+   print(f"\tchild_depth={child_depth}")
+   print("")
+
 # Validation done. Tell the user what type of hint graph will be created
 action_string = "Creating hint"
-if args.hint_chain_mode:
+if not no_depth_option:
    action_string += f" chain for slot {room_status["players"][slot_id-1][0]} showing" # pyright: ignore[reportOptionalOperand]
-   if args.hint_chain_mode == "parents":
-      action_string += " parent"
-   if args.hint_chain_mode == "children":
-      action_string += " child"
-   if args.hint_chain_mode == "both":
-      action_string += " parent and child"
-   action_string += " nodes"
+   if show_parent_nodes and show_child_nodes:
+      action_string += f" parent nodes at depth {parent_depth} and child nodes at depth {child_depth}"
+   elif show_parent_nodes:
+      action_string += f" parent nodes at depth {parent_depth}"
+   elif show_child_nodes:
+      action_string += f" child nodes at depth {child_depth}"
 else:
    action_string += " graph for the entire multiworld"
 
@@ -174,8 +227,9 @@ hints_raw = [
    }
    for hint in hints_raw
 ]
-with open(f"{data_folder}/hints_raw_unique.json", "w") as file:
-   json.dump(hints_raw, file, indent=3)
+if debug:
+   with open(f"{data_folder}/hints_raw_unique.json", "w") as file:
+      json.dump(hints_raw, file, indent=3)
 
 # Create an initial list of hints_processed
 print("Processing hint data")
@@ -217,8 +271,9 @@ for hint_datum in hints_processed:
    else:
       node_name = f"{hint_datum["slot_name"]}"
    hint_datum["node_name"] = node_name
-with open(f"{data_folder}/hints_processed_pre.json", "w") as file:
-   json.dump(hints_processed, file, indent=3)
+if debug:
+   with open(f"{data_folder}/hints_processed_pre.json", "w") as file:
+      json.dump(hints_processed, file, indent=3)
 
 # Add hints to hints_processed
 for hint in hints_raw:
@@ -256,8 +311,9 @@ for hint in hints_raw:
    })
    hints_processed[hint["receiving_player"]-1]["has_hint"] = True
    hints_processed[hint["finding_player"]-1]["has_hint"] = True
-with open(f"{data_folder}/hints_processed.json", "w") as file:
-   json.dump(hints_processed, file, indent=3)
+if debug:
+   with open(f"{data_folder}/hints_processed.json", "w") as file:
+      json.dump(hints_processed, file, indent=3)
 
 visited_nodes: set = set()
 
@@ -269,7 +325,8 @@ if not show_child_nodes and not show_parent_nodes:
 if show_child_nodes:
    nodes: list = [hints_processed[slot_id-1]] # pyright: ignore[reportOptionalOperand]
    visited_nodes_child: set = set([hints_processed[slot_id-1]["player_num"]]) # pyright: ignore[reportOptionalOperand] # 1 based index into hints_processed
-   while nodes:
+   while nodes and child_depth > 0:
+      child_depth -= 1
       current_node = nodes.pop()
       for hint in current_node["hints_to_find"]:
          if hint["receiving_player"] not in visited_nodes_child:
@@ -281,7 +338,8 @@ if show_child_nodes:
 if show_parent_nodes:
    nodes: list = [hints_processed[slot_id-1]] # pyright: ignore[reportOptionalOperand]
    visited_nodes_parent: set = set([hints_processed[slot_id-1]["player_num"]]) # pyright: ignore[reportOptionalOperand]
-   while nodes:
+   while nodes and parent_depth > 0:
+      parent_depth -= 1
       current_node = nodes.pop()
       for hint in current_node["hints_for_others"]:
          if hint["finding_player"] not in visited_nodes_parent:
