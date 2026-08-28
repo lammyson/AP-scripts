@@ -55,7 +55,7 @@ Path(output_folder).mkdir(parents=True, exist_ok=True)
 now_time = datetime.now(tz=timezone.utc)
 
 # Verify the time the data was last fetched so that we don't request data too quickly
-cache_timeout_s = 300
+cache_timeout_s = 1800
 if Path(f"{output_folder}/last_fetched.json").exists():
    with open(f"{output_folder}/last_fetched.json", "r") as s:
       last_fetched = json.load(s)
