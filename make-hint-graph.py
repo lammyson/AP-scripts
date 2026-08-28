@@ -3,15 +3,59 @@ import graphviz
 import json
 from pathlib import Path
 
-parser = argparse.ArgumentParser(description="Make a hint graph a room's data")
-parser.add_argument("-f", "--data-folder", type=str, required=True, help="Folder containing room data retrieved by get-room-data.py")
-parser.add_argument("-o", "--output-filename", type=str, help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.png")
+parser = argparse.ArgumentParser(description="Make a hint graph of a room's data. Graphs all hints by default.", formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument("-f", "--data-folder", required=True, type=Path, metavar="FOLDER", help="Folder containing room data retrieved by get-room-data.py")
+parser.add_argument("-o", "--output-filename", metavar="FILE", help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.png")
+
+choices_desc = {
+   "parents": "Show all slots that the given slot depends on",
+   "children": "Show all slots that depend on the given slot",
+   "both": "Show both parents and children",
+}
+
+hint_chain_group = parser.add_argument_group("Hint chain options")
+hint_chain_group.add_argument(
+   "-hc", "--hint-chain-mode",
+   choices=["parents", "children", "both"],
+   # metavar="MODE",
+   help="parents - Show all slots that the given slot depends on\nchildren - Show all slots that depend on the given slot\nboth - show both parents and children")
+
+node_select_arg_group = parser.add_argument_group("Slot name options", description="Use these arguments to select a specific slot/alias. Requires setting -hc|--hint-chain-mode") \
+   .add_mutually_exclusive_group(required=False)
+node_select_arg_group.add_argument("--slot-name", metavar="NAME", help="Slot name")
+node_select_arg_group.add_argument("--alias", help="Alias of the slot")
+node_select_arg_group.add_argument("--slot-id", type=int, metavar="ID", help="Id (integer) of the slot. Can be found on the room page")
+
 args = parser.parse_args()
 
-# TODO - Make these configurable. Allow searching by slot name and alias too
-node_id = 96 # GhostlyCrystal in Questionable Decisions
-show_parent_nodes = True
+# print(f"data-folder={args.data_folder}")
+# print(f"output-filename={args.output_filename}")
+# print(f"hint-chain-mode={args.hint_chain_mode}")
+# print(f"slot-name={args.slot_name}")
+# print(f"alias={args.alias}")
+# print(f"slot-id={args.slot_id}")
+
+if not args.data_folder.exists():
+   parser.error(f"Data folder={args.data_folder} does not exist")
+if not Path(args.data_folder).is_dir():
+   parser.error(f"Data folder={args.data_folder} is not a directory")
+
+show_parent_nodes = False
 show_child_nodes = False
+if args.hint_chain_mode == "parents":
+   show_parent_nodes = True
+elif args.hint_chain_mode == "children":
+   show_child_nodes = True
+elif args.hint_chain_mode == "both":
+   show_parent_nodes = True
+   show_child_nodes = True
+
+no_slot_name = args.slot_name == None and args.alias == None and args.slot_id == None
+if args.hint_chain_mode and no_slot_name:
+   parser.error("One of the arguments --slot-name --alias --slot-id is required when using -hc|--hint-chain-mode")
+
+if not no_slot_name and not args.hint_chain_mode:
+   parser.error("One of the arguments --slot-name --alias --slot-id was provided without -hc|--hint-chain-mode")
 
 # TODO - Filter out nodes with >= some number of hints to find - Make this configurable
 high_hint_count = 2147483647
@@ -28,8 +72,72 @@ with open(f"{data_folder}/static_tracker.json", "r") as file:
 with open(f"{data_folder}/room_datapackages.json", "r") as file:
    room_datapackages = json.load(file)
 
+# argparse only allows one of slot_id/slot_name/alias to be set so no need to re-validate that here
+
+# Validate slot id if it was provided
+# TODO - support item_links
+slot_id = args.slot_id
+if slot_id:
+   if slot_id > len(room_status["players"]):
+      parser.error(f"slot_id={slot_id} is greater than the number of players in the room ({len(room_status["players"])})")
+
+# Validate slot name if it was provided
+# TODO - support item_links
+slot_name = args.slot_name
+if slot_name:
+   matches = [[idx, player] for idx, player in enumerate(room_status["players"]) if player[0] == slot_name]
+
+   if len(matches) == 0:
+      parser.error(f"slot_name={slot_name} not found. Please check your spelling")
+   elif len(matches) >= 2:
+      error_json = []
+      for match in matches:
+         error_json.append({
+            "alias": tracker["aliases"][match[0]+1]["alias"],
+            "player": match[0]+1,
+            "slot_name": match[1][0]
+         })
+      parser.error(f"slot_name={slot_name} found multiple times. This should never happen. Run get-room-info.py to pull fresh data\n\t{error_json}")
+
+   slot_id = matches[0][0]+1
+
+# Validate alias if it was provided
+alias = args.alias
+if alias:
+   matches = [name for name in tracker["aliases"] if name["alias"] == alias]
+
+   if len(matches) == 0:
+      parser.error(f"alias={alias} not found. Please check your spelling")
+   elif len(matches) >= 2: # aliases are not globally unique
+      matches = [{k: v for k, v in d.items() if k != "team"} for d in matches]
+      for match in matches:
+         match["slot_name"] = room_status["players"][match["player"]-1][0]
+      parser.error(f"alias={alias} found multiple times.\n\t{matches}")
+
+   slot_id = matches[0]["player"]
+
+# Create output filename
 fetch_time = last_fetched["last_fetched"]
-output_filename = Path(f"{args.output_filename}_{fetch_time}")
+if args.output_filename != None:
+   output_filename = Path(f"{args.output_filename}_{fetch_time}")
+else:
+   output_filename = Path(f"{fetch_time}")
+
+# Validation done. Tell the user what type of hint graph will be created
+action_string = "Creating hint"
+if args.hint_chain_mode:
+   action_string += f" chain for slot {room_status["players"][slot_id-1][0]} showing" # pyright: ignore[reportOptionalOperand]
+   if args.hint_chain_mode == "parents":
+      action_string += " parent"
+   if args.hint_chain_mode == "children":
+      action_string += " child"
+   if args.hint_chain_mode == "both":
+      action_string += " parent and child"
+   action_string += " nodes"
+else:
+   action_string += " graph for the entire multiworld"
+
+print(action_string)
 
 # Flatten all the tracker["hints"][idx]["hints"] into a single list of dicts while getting rid of dupes
 # https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#hint
@@ -39,9 +147,11 @@ for hint_dict in tracker["hints"]:
    for hint in hint_dict["hints"]:
       if hint not in hints_raw:
          hints_raw.append(hint)
-         # TODO - TEMPORARY - use to count how many unfound progression hints a slot has been hinted to find
+
+         # Count how many unfound progression hints a slot has been hinted to find
          if hint[4] == False and (hint[6] & 0x1 == 1):
             finding_player_count[hint[1]-1] += 1
+high_hint_count_slots = [index + 1 for index, value in enumerate(finding_player_count) if value >= high_hint_count]
 
 hints_raw = [
    {
@@ -58,8 +168,6 @@ hints_raw = [
 ]
 with open(f"{data_folder}/hints_raw_unique.json", "w") as file:
    json.dump(hints_raw, file, indent=3)
-
-high_hint_count_slots = [index + 1 for index, value in enumerate(finding_player_count) if value >= high_hint_count]
 
 # Create an initial list of hints_processed
 print("Processing hint data")
@@ -149,33 +257,29 @@ visited_nodes: set = set()
 if not show_child_nodes and not show_parent_nodes:
    visited_nodes.update([node["player_num"] for node in hints_processed])
 
-# TODO - Do second pass to filter out nodes based on what node you wanna look at
-
+# Show nodes that depend on us
 if show_child_nodes:
-   nodes: list = [hints_processed[node_id-1]]
-   visited_nodes_child: set = set([hints_processed[node_id-1]["player_num"]]) # 1 based index into hints_processed
+   nodes: list = [hints_processed[slot_id-1]] # pyright: ignore[reportOptionalOperand]
+   visited_nodes_child: set = set([hints_processed[slot_id-1]["player_num"]]) # pyright: ignore[reportOptionalOperand] # 1 based index into hints_processed
    while nodes:
       current_node = nodes.pop()
       for hint in current_node["hints_to_find"]:
          if hint["receiving_player"] not in visited_nodes_child:
             visited_nodes_child.add(hint["receiving_player"])
             nodes.append(hints_processed[hint["receiving_player"]-1])
-   print(f"child_nodes=[{visited_nodes_child}]")
    visited_nodes.update(visited_nodes_child)
 
+# Show nodes that we depend on
 if show_parent_nodes:
-   nodes: list = [hints_processed[node_id-1]]
-   visited_nodes_parent: set = set([hints_processed[node_id-1]["player_num"]])
+   nodes: list = [hints_processed[slot_id-1]] # pyright: ignore[reportOptionalOperand]
+   visited_nodes_parent: set = set([hints_processed[slot_id-1]["player_num"]]) # pyright: ignore[reportOptionalOperand]
    while nodes:
       current_node = nodes.pop()
       for hint in current_node["hints_for_others"]:
          if hint["finding_player"] not in visited_nodes_parent:
             visited_nodes_parent.add(hint["finding_player"])
             nodes.append(hints_processed[hint["finding_player"]-1])
-   print(f"parent_nodes=[{visited_nodes_parent}]")
    visited_nodes.update(visited_nodes_parent)
-
-print(f"nodes_to_graph=[{visited_nodes}]")
 
 # Create the graph
 print("Creating hint graph")
