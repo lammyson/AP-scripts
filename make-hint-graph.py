@@ -167,10 +167,9 @@ if alias:
 
 # Create output filename
 fetch_time = last_fetched["last_fetched"]
+output_filename = Path(f"{fetch_time}")
 if args.output_filename != None:
-   output_filename = Path(f"{args.output_filename}_{fetch_time}")
-else:
-   output_filename = Path(f"{fetch_time}")
+   output_filename = Path(f"{output_filename}_{args.output_filename}")
 
 if debug:
    print("Just after argument validation")
