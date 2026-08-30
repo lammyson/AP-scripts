@@ -21,6 +21,7 @@ parser.add_argument(
    help="Print debug"
 )
 
+# TODO - Add --slot-names option to color multiple slots of interest red
 slot_select_group = parser.add_argument_group(
    "Slot name options",
    description=
@@ -231,7 +232,6 @@ if debug:
       json.dump(hints_raw, file, indent=3)
 
 # Create an initial list of hints_processed
-print("Processing hint data")
 hints_processed = [
    {
       "player_num": tracker["aliases"][idx]["player"],
@@ -347,7 +347,6 @@ if show_parent_nodes:
    visited_nodes.update(visited_nodes_parent)
 
 # Create the graph
-print("Creating hint graph")
 dot = graphviz.Digraph('hint-graph', graph_attr={'rankdir':'LR'})
 
 # If a specific slot was provided, color it red
@@ -366,9 +365,11 @@ for index in visited_nodes:
                      label=f"{hint["item_name"]} at {hint["location_name"]}")
 
 # Save it!
+# TODO - Add engine and format to command line options, combine with output filename into Output options argument group
 # engines = ['dot','neato','fdp','sfdp','circo','twopi','osage','patchwork']
-engines = ['dot']
+engines = ['dot'] # TODO - allow dot, neato, or circo
+format = 'svg' # TODO - probably just allow anything, recommend svg or jpg
 for engine in engines:
    dot.engine = engine
-   print(f"Saving to {data_folder}/graphs/{output_filename}.jpg")
-   dot.render(filename=f"{output_filename}", directory=f"{data_folder}/graphs", format='jpg')
+   print(f"Saving to {data_folder}/graphs/{output_filename}.{format}")
+   dot.render(filename=f"{output_filename}", directory=f"{data_folder}/graphs", format=format)
