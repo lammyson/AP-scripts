@@ -103,7 +103,7 @@ if args.child_depth:
 
 no_depth_option = args.depth == None and args.parent_depth == None and args.child_depth == None
 no_slot_name = args.slot_name == None and args.alias == None and args.slot_id == None
-if no_depth_option and no_slot_name:
+if not no_depth_option and no_slot_name:
    parser.error("One of the arguments --slot-name|--alias|--slot-id is required when using --depth|--parent-depth|--child-depth")
 
 # TODO - Filter out nodes with >= some number of hints to find - Make this configurable
