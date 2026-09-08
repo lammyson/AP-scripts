@@ -13,7 +13,7 @@ parser.add_argument(
 parser.add_argument(
    "-o", "--output-filename",
    metavar="FILE",
-   help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.png")
+   help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.svg")
 parser.add_argument(
    "-d", "--debug",
    default=False,
@@ -120,7 +120,7 @@ with open(f"{data_folder}/tracker.json", "r") as file:
 with open(f"{data_folder}/static_tracker.json", "r") as file:
    static_tracker = json.load(file)
 with open(f"{data_folder}/room_datapackages.json", "r") as file:
-   room_datapackages = json.load(file)
+   room_datapackages = json.load(file) # TODO - Load from shared datapackage cache
 
 # argparse only allows one of slot_id/slot_name/alias to be set so no need to re-validate that here
 
@@ -299,6 +299,7 @@ for hint in hints_raw:
       "location_name": location[0],
       "item_id": hint["item"],
       "item_name": item[0],
+      "entrance": hint["entrance"]
    })
    hints_processed[hint["receiving_player"]-1]["hints_for_others"].append({
       "finding_player": hint["finding_player"],
@@ -307,6 +308,7 @@ for hint in hints_raw:
       "location_name": location[0],
       "item_id": hint["item"],
       "item_name": item[0],
+      "entrance": hint["entrance"]
    })
    hints_processed[hint["receiving_player"]-1]["has_hint"] = True
    hints_processed[hint["finding_player"]-1]["has_hint"] = True
@@ -360,16 +362,21 @@ for index in visited_nodes:
       dot.node(f"{player["player_num"]}", player["node_name"])
       for hint in player["hints_to_find"]:
          if hint["finding_player"] in visited_nodes and hint["receiving_player"] in visited_nodes:
+            label = f"{hint["item_name"]} at {hint["location_name"]}"
+            # TODO - Make adding entrance info configurable since it adds a lot to the hint graph
+            # if hint["entrance"]:
+            #    label = f"{label} ({hint["entrance"]})"
             dot.edge(tail_name=f"{hint["finding_player"]}",
                      head_name=f"{hint["receiving_player"]}",
-                     label=f"{hint["item_name"]} at {hint["location_name"]}")
+                     label=label)
 
 # Save it!
 # TODO - Add engine and format to command line options, combine with output filename into Output options argument group
 # engines = ['dot','neato','fdp','sfdp','circo','twopi','osage','patchwork']
-engines = ['dot'] # TODO - allow dot, neato, or circo
+engines = ['dot'] # TODO - allow anything, recommend dot, neato, or circo
 format = 'svg' # TODO - probably just allow anything, recommend svg or jpg
 for engine in engines:
+   output_filename_final = f"{output_filename}"
    dot.engine = engine
-   print(f"Saving to {data_folder}/graphs/{output_filename}.{format}")
-   dot.render(filename=f"{output_filename}", directory=f"{data_folder}/graphs", format=format)
+   print(f"Saving to {data_folder}/graphs/{output_filename_final}.{format}")
+   dot.render(filename=f"{output_filename_final}", directory=f"{data_folder}/graphs", format=format)

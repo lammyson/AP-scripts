@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 import requests
 
+# TODO - Add a debug flag that sets indent=3, otherwise set indent=0
+indent = 3
+
 def download_api_single(
       api_name: str,
       endpoint: str,
@@ -19,9 +22,12 @@ def download_api_single(
    print(f"Downloading {api_name} to {output_folder}/{api_name}.json")
    data = requests.get(f"https://archipelago.gg/api/{endpoint}").json()
    with open(f"{output_folder}/{api_name}.json", "w") as file:
-      json.dump(data, file, indent=3)
+      json.dump(data, file, indent=indent)
    return data
 
+# TODO - Cache datapackage files to their own files and check for existence before downloading
+# See %LOCALAPPDATA%\Archipelago\Cache for how this could be done
+# Should we always just download them? Probably unless we know they aren't corrupted
 def download_room_datapackages(
       api_name: str,
       static_tracker: dict,
@@ -40,7 +46,7 @@ def download_room_datapackages(
       for game in static_tracker["datapackage"]
    }
    with open(f"{output_folder}/{api_name}.json", "w") as file:
-      json.dump(room_status, file, indent=3)
+      json.dump(room_status, file, indent=indent)
    return data
 
 # Parse arguments
@@ -98,12 +104,14 @@ room_datapackages = download_room_datapackages(
 
 # Write the data to file
 with open(f"{output_folder}/room_status.json", "w") as file:
-   json.dump(room_status, file, indent=3)
+   json.dump(room_status, file, indent=indent)
 with open(f"{output_folder}/tracker.json", "w") as file:
-   json.dump(tracker, file, indent=3)
+   json.dump(tracker, file, indent=indent)
 with open(f"{output_folder}/static_tracker.json", "w") as file:
-   json.dump(static_tracker, file, indent=3)
+   json.dump(static_tracker, file, indent=indent)
 with open(f"{output_folder}/room_datapackages.json", "w") as file:
-   json.dump(room_datapackages, file, indent=3)
+   json.dump(room_datapackages, file, indent=indent)
 with open(f"{output_folder}/last_fetched.json", "w") as file:
-   json.dump({"last_fetched": datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")}, file, indent=3)
+   json.dump({"last_fetched": datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")}, file, indent=indent)
+
+# TODO - Look at some of the other API endpoints
