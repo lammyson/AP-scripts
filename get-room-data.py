@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import requests
 
+
 def download_api_single(
         api_name: str,
         endpoint: str) -> dict:
@@ -18,6 +19,7 @@ def download_api_single(
     print(f"Downloading {api_name}")
     data = requests.get(f"https://archipelago.gg/api/{endpoint}").json()
     return data
+
 
 # TODO - Cache datapackage files to their own files and check for existence before downloading
 # See %LOCALAPPDATA%\Archipelago\Cache for how this could be done
@@ -40,11 +42,24 @@ def download_room_datapackages(
     }
     return data
 
+
 # Parse arguments
 parser = argparse.ArgumentParser(description="Downloads data from an Archipelago room")
-parser.add_argument("-r", "--room-suuid", type=str, required=True, help="Room SUUID. This is a string found in your room's URL. Example: https://archipelago.gg/<ROOM_SUUID>")
-parser.add_argument("-f", "--output-folder", type=str, required=True, help="Output folder. This is where all json files and graphs will be written")
-parser.add_argument("-d", "--debug", default=False, action="store_true", help="Print debug files")
+parser.add_argument(
+    "-r", "--room-suuid",
+    type=str,
+    required=True,
+    help="Room SUUID. This is a string found in your room's URL. Example: https://archipelago.gg/<ROOM_SUUID>")
+parser.add_argument(
+    "-f", "--output-folder",
+    type=str,
+    required=True,
+    help="Output folder. This is where all json files and graphs will be written")
+parser.add_argument(
+    "-d", "--debug",
+    default=False,
+    action="store_true",
+    help="Print debug files")
 args = parser.parse_args()
 
 debug: bool = args.debug
@@ -67,33 +82,32 @@ if Path(f"{output_folder}/last_fetched.json").exists():
 
 print(f"Using room-suuid={args.room_suuid}")
 
-# /room_status/<suuid:room_id> - https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/webhost%20api.md#room_statussuuidroom_id
+# /room_status/<suuid:room_id>
 # Cache timer: None
 room_status = download_api_single(
     api_name="room_status",
     endpoint=f"/room_status/{args.room_suuid}")
 tracker_suuid = room_status["tracker"]
 
-# /tracker/<suuid:tracker> - https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/webhost%20api.md#trackersuuidtracker
+# /tracker/<suuid:tracker>
 # Cache timer: 60 seconds
 tracker = download_api_single(
     api_name="tracker",
     endpoint=f"/tracker/{tracker_suuid}")
 
-# /static_tracker/<suuid:tracker> - https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/webhost%20api.md#static_trackersuuidtracker
-# Cache timer: 300 seconds
+# /static_tracker/<suuid:tracker>
 static_tracker = download_api_single(
     api_name="static_tracker",
     endpoint=f"/static_tracker/{tracker_suuid}")
 
 # TODO - do we care about this for anything?
-# /slot_data_tracker/<suuid:tracker> - https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/webhost%20api.md#slot_data_trackersuuidtracker
+# /slot_data_tracker/<suuid:tracker>
 # Cache timer: 300 seconds
 slot_data_tracker = download_api_single(
     api_name="slot_data_tracker",
     endpoint=f"/slot_data_tracker/{tracker_suuid}")
 
-# /datapackage/<string:checksum> - https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/webhost%20api.md#datapackagestringchecksum
+# /datapackage/<string:checksum>
 # Cache timer: None
 room_datapackages = download_room_datapackages(
     api_name="room_datapackages",
@@ -115,7 +129,7 @@ with open(f"{output_folder}/slot_data_tracker.json", "w") as file:
 with open(f"{output_folder}/room_datapackages.json", "w") as file:
     json.dump(room_datapackages, file)
     print(f"Wrote room_datapackages to {output_folder}/room_datapackages.json")
-last_fetched_json = {"last_fetched":datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")}
+last_fetched_json = {"last_fetched": datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")}
 with open(f"{output_folder}/last_fetched.json", "w") as file:
     json.dump(last_fetched_json, file)
     print(f"Wrote last_fetched to {output_folder}/last_fetched.json")

@@ -11,13 +11,15 @@ import time
 # - One that processes the raw hints into hints_processed.json
 # - One that reads hints_processed.json and does all the display stuff
 
+
 # https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#hintstatus
 class HintStatus(enum.IntEnum):
-    HINT_UNSPECIFIED = 0  # The receiving player has not specified any status
-    HINT_NO_PRIORITY = 10 # The receiving player has specified that the item is unneeded
-    HINT_AVOID = 20       # The receiving player has specified that the item is detrimental
-    HINT_PRIORITY = 30    # The receiving player has specified that the item is needed
-    HINT_FOUND = 40       # The location has been collected. Status cannot be changed once found.
+    HINT_UNSPECIFIED = 0   # The receiving player has not specified any status
+    HINT_NO_PRIORITY = 10  # The receiving player has specified that the item is unneeded
+    HINT_AVOID = 20        # The receiving player has specified that the item is detrimental
+    HINT_PRIORITY = 30     # The receiving player has specified that the item is needed
+    HINT_FOUND = 40        # The location has been collected. Status cannot be changed once found.
+
 
 # https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#hint
 class Hint(NamedTuple):
@@ -30,15 +32,17 @@ class Hint(NamedTuple):
     item_flags: int = 0
     status: HintStatus = HintStatus.HINT_UNSPECIFIED
 
+
 # Internal hint type to make creating the hint graph easier
 class HintProcessed(NamedTuple):
     finding_player: int
     receiving_player: int
     location_id: int
-    location_name: str # Save the location_id lookup
+    location_name: str  # Save the location_id lookup
     item_id: int
-    item_name: str # Save the item_id lookup
+    item_name: str  # Save the item_id lookup
     entrance: str
+
 
 # Internal hint type to make creating the hint graph easier
 @dataclass
@@ -54,6 +58,7 @@ class PlayerHints:
     hints_to_find: list[HintProcessed]
     hints_for_others: list[HintProcessed]
 
+
 def set_node_name(slot_name: str, alias: str | None, is_item_link: bool) -> str:
     if alias:
         node_name = f"{alias} ({slot_name})"
@@ -62,6 +67,7 @@ def set_node_name(slot_name: str, alias: str | None, is_item_link: bool) -> str:
     else:
         node_name = f"{slot_name}"
     return node_name
+
 
 parser = argparse.ArgumentParser(description="Make a hint graph of a room's hints. Graphs all hints by default.")
 parser.add_argument(
@@ -121,12 +127,12 @@ output_group.add_argument(
 output_group.add_argument(
     "--output-format",
     default="svg",
-    choices=["svg","jpg"],
+    choices=["svg", "jpg"],
     help="Output file format. Default is svg")
 output_group.add_argument(
     "--output-engine",
     default="dot",
-    choices=["dot","circo"],
+    choices=["dot", "circo"],
     help="Layout engine for graphviz to use when creating the hint graph. Default is dot")
 
 args = parser.parse_args()
@@ -164,18 +170,18 @@ child_depth: int = 2147483647
 
 if args.depth:
     show_parent_nodes = True
-    parent_depth=args.depth
+    parent_depth = args.depth
     show_child_nodes = True
-    child_depth=args.depth
+    child_depth = args.depth
 if args.parent_depth:
     show_parent_nodes = True
-    parent_depth=args.parent_depth
+    parent_depth = args.parent_depth
 if args.child_depth:
     show_child_nodes = True
-    child_depth=args.child_depth
+    child_depth = args.child_depth
 
-depth_option_provided: bool = args.depth != None or args.parent_depth != None or args.child_depth != None
-hint_chain_slot_provided: bool = args.hint_chain_slot != None
+depth_option_provided: bool = args.depth is not None or args.parent_depth is not None or args.child_depth is not None
+hint_chain_slot_provided: bool = args.hint_chain_slot is not None
 if depth_option_provided and not hint_chain_slot_provided:
     parser.error("The --hint-chain-slot argument is required when using --depth|--child-depth|--parent-depth")
 if hint_chain_slot_provided and not depth_option_provided:
@@ -243,7 +249,7 @@ if highlight_slots:
 # Create output filename
 fetch_time: str = last_fetched["last_fetched"]
 output_filename: Path = Path(f"{fetch_time}")
-if args.output_filename != None:
+if args.output_filename is not None:
     output_filename = Path(f"{output_filename}_{args.output_filename}")
 
 if debug:
@@ -282,15 +288,15 @@ if highlight_slots:
     action_string += f"\n- And highlighting the following slots: {highlight_slots}"
 
 if show_entrances:
-    action_string += f"\n- And showing entrance information"
+    action_string += "\n- And showing entrance information"
 
 if show_goaled_slots:
-    action_string += f"\n- And showing goaled slots that have not received their hinted progression items"
+    action_string += "\n- And showing goaled slots that have not received their hinted progression items"
 
 print(action_string)
 
 # Flatten all the tracker["hints"][idx]["hints"] into a single list of dicts while getting rid of dupes
-finding_player_count = [0] * (len(static_tracker["player_game"]) + len(static_tracker["groups"]) + 1) # Add 1 for the special Archipelago slot at slot 0
+finding_player_count = [0] * (len(static_tracker["player_game"]) + len(static_tracker["groups"]) + 1)  # Add 1 for the special Archipelago slot at slot 0
 hints_raw_unique: list[Hint] = []
 for hint_dict in tracker["hints"]:
     for h in hint_dict["hints"]:
@@ -307,52 +313,52 @@ if debug:
     with open(f"{data_folder}/make-hint-graph-debug/hints_raw_unique.json", "w") as file:
         json.dump(hints_raw_unique, file, indent=3)
 
-# Create the initial list of hints with 
+# Create the initial list of hints with
 hints_processed: list[PlayerHints] = []
 
 # Add the special Archipelago slot (also makes indexing 0-based yay!)
 hints_processed.append(PlayerHints(
-    player_num = 0,
-    slot_name = "Archipelago",
-    game = "Archipelago",
-    alias = None,
-    has_goaled = True,
-    hints_to_find = [],
-    hints_for_others = [],
-    has_hint = False,
-    is_item_link = False,
-    node_name = "Archipelago"
+    player_num=0,
+    slot_name="Archipelago",
+    game="Archipelago",
+    alias=None,
+    has_goaled=True,
+    hints_to_find=[],
+    hints_for_others=[],
+    has_hint=False,
+    is_item_link=False,
+    node_name="Archipelago"
 ))
 
 # Add the normal slots
 for (idx, slot_name_local) in enumerate(room_status["players"]):
     hints_processed.append(PlayerHints(
-        player_num = tracker["aliases"][idx]["player"],
-        slot_name = slot_name_local[0],
-        game = slot_name_local[1],
-        alias = tracker["aliases"][idx]["alias"],
-        has_goaled = tracker["player_status"][idx]["status"] == 30,
-        hints_to_find = [],
-        hints_for_others = [],
-        has_hint = False,
-        is_item_link = False,
-        node_name = set_node_name(slot_name=slot_name_local[0], alias=tracker["aliases"][idx]["alias"], is_item_link=False)
+        player_num=tracker["aliases"][idx]["player"],
+        slot_name=slot_name_local[0],
+        game=slot_name_local[1],
+        alias=tracker["aliases"][idx]["alias"],
+        has_goaled=tracker["player_status"][idx]["status"] == 30,
+        hints_to_find=[],
+        hints_for_others=[],
+        has_hint=False,
+        is_item_link=False,
+        node_name=set_node_name(slot_name=slot_name_local[0], alias=tracker["aliases"][idx]["alias"], is_item_link=False)
     ))
 
 # Add item_links slots
 for item_link in static_tracker["groups"]:
-   hints_processed.append(PlayerHints(
-      player_num = item_link["slot"],
-      slot_name = item_link["name"],
-      game = hints_processed[item_link["members"][0]-1].game,
-      alias = None,
-      has_goaled = False,
-      hints_to_find = [],
-      hints_for_others = [],
-      has_hint = False,
-      is_item_link = True,
-      node_name = set_node_name(slot_name=item_link["name"], alias=None, is_item_link=True)
-   ))
+    hints_processed.append(PlayerHints(
+        player_num=item_link["slot"],
+        slot_name=item_link["name"],
+        game=hints_processed[item_link["members"][0]-1].game,
+        alias=None,
+        has_goaled=False,
+        hints_to_find=[],
+        hints_for_others=[],
+        has_hint=False,
+        is_item_link=True,
+        node_name=set_node_name(slot_name=item_link["name"], alias=None, is_item_link=True)
+    ))
 
 if debug:
     with open(f"{data_folder}/make-hint-graph-debug/hints_processed_pre.json", "w") as file:
@@ -361,7 +367,7 @@ if debug:
 # Add hints to hints_processed
 for hint in hints_raw_unique:
     # Skip hints that were found
-    if hint.found == True:
+    if hint.found:
         continue
 
     # Skip non-progression hints
@@ -380,22 +386,22 @@ for hint in hints_raw_unique:
     item = [k for k, v in room_datapackages[hints_processed[hint.receiving_player].game]["item_name_to_id"].items() if v == hint.item]
 
     hints_processed[hint.finding_player].hints_to_find.append(HintProcessed(
-        finding_player = hint.finding_player,
-        receiving_player = hint.receiving_player,
-        location_id = hint.location,
-        location_name = location[0],
-        item_id = hint.item,
-        item_name = item[0],
-        entrance = hint.entrance
+        finding_player=hint.finding_player,
+        receiving_player=hint.receiving_player,
+        location_id=hint.location,
+        location_name=location[0],
+        item_id=hint.item,
+        item_name=item[0],
+        entrance=hint.entrance
     ))
     hints_processed[hint.receiving_player].hints_for_others.append(HintProcessed(
-        finding_player = hint.finding_player,
-        receiving_player = hint.receiving_player,
-        location_id = hint.location,
-        location_name = location[0],
-        item_id = hint.item,
-        item_name = item[0],
-        entrance = hint.entrance
+        finding_player=hint.finding_player,
+        receiving_player=hint.receiving_player,
+        location_id=hint.location,
+        location_name=location[0],
+        item_id=hint.item,
+        item_name=item[0],
+        entrance=hint.entrance
     ))
     hints_processed[hint.receiving_player].has_hint = True
     hints_processed[hint.finding_player].has_hint = True
