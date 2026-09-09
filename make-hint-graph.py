@@ -82,10 +82,6 @@ parser.add_argument(
    metavar="SLOT",
    help="List of slot names to highlight in the hint graph")
 parser.add_argument(
-   "-o", "--output-filename",
-   metavar="FILE",
-   help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.svg")
-parser.add_argument(
    "--show-entrances",
    default=False,
    action="store_true",
@@ -117,6 +113,22 @@ hint_chain_group.add_argument(
    type=int,
    help="Sets how deep in the hint chain to display for slots that you depend on. Requires the --hint-chain-slot option. Overrides --depth option")
 
+output_group = parser.add_argument_group("File output options (optional)")
+output_group.add_argument(
+   "-o", "--output-filename",
+   metavar="FILE",
+   help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.svg")
+output_group.add_argument(
+   "--output-format",
+   default="svg",
+   choices=["svg","jpg"],
+   help="Output file format. Default is svg")
+output_group.add_argument(
+   "--output-engine",
+   default="dot",
+   choices=["dot","circo"],
+   help="Layout engine for graphviz to use when creating the hint graph. Default is dot")
+
 args = parser.parse_args()
 debug: bool = args.debug
 
@@ -124,17 +136,21 @@ if debug:
    print("Just after argument parsing")
    print(f"\tdata-folder={args.data_folder}")
    print(f"\thighlight-slots={args.highlight_slots}")
-   print(f"\toutput-filename={args.output_filename}")
    print(f"\tshow-entrances={args.show_entrances}")
    print(f"\tshow-goaled-slots={args.show_goaled_slots}")
    print(f"\thint-chain-slot={args.hint_chain_slot}")
    print(f"\tdepth={args.depth}")
    print(f"\tchild-depth={args.child_depth}")
    print(f"\tparent-depth={args.parent_depth}")
+   print(f"\toutput-filename={args.output_filename}")
+   print(f"\toutput-format={args.output_format}")
+   print(f"\toutput-engine={args.output_engine}")
    print("")
 
 show_entrances: bool = args.show_entrances
 show_goaled_slots: bool = args.show_goaled_slots
+output_format = args.output_format
+output_engine = args.output_engine
 
 if not args.data_folder.exists():
    parser.error(f"Data folder={args.data_folder} does not exist")
@@ -234,7 +250,6 @@ if debug:
    print("Just after argument validation")
    print(f"\tdata-folder={data_folder}")
    print(f"\thighlight-slots={highlight_slots}")
-   print(f"\toutput-filename={output_filename}")
    print(f"\tshow-entrances={show_entrances}")
    print(f"\tshow-goaled-slots={show_goaled_slots}")
    print(f"\thint-chain-slot={hint_chain_slot_name}")
@@ -242,6 +257,9 @@ if debug:
    print(f"\tparent_depth={parent_depth}")
    print(f"\tshow_child_nodes={show_child_nodes}")
    print(f"\tchild_depth={child_depth}")
+   print(f"\toutput_filename={output_filename}")
+   print(f"\toutput_format={output_format}")
+   print(f"\toutput_engine={output_engine}")
    print("")
 
    Path(f"{data_folder}/hint_debug").mkdir(parents=True, exist_ok=True)
@@ -258,6 +276,7 @@ if depth_option_provided:
       action_string += f" child nodes at depth {child_depth}"
 else:
    action_string += " graph for the entire multiworld"
+action_string += f" using layout engine {output_engine} and file format {output_format}"
 
 if highlight_slots:
    action_string += f"\n- And highlighting the following slots: {highlight_slots}"
@@ -422,10 +441,10 @@ start_time = time.perf_counter()
 # Create the graph
 dot = pygraphviz.AGraph(directed=True, rankdir='LR')
 
-# Highlight nodes if they are called out
+# Highlight nodes if they are called out even if they won't connect to the graph with current settings
 if slot_ids_to_highlight:
    for slot_id in slot_ids_to_highlight:
-      dot.add_node(f"{hints_processed[slot_id].player_num}", label=hints_processed[slot_id].node_name, color="red", fillcolor="red", style="filled", fontcolor="white")
+      dot.add_node(f"{hints_processed[slot_id].player_num}", label=hints_processed[slot_id].node_name, color="darkgreen", fillcolor="darkgreen", style="filled", fontcolor="white")
 
 # Add all hints
 for index in visited_nodes:
@@ -442,14 +461,8 @@ for index in visited_nodes:
                          label=label)
 
 # Save it!
-# TODO - Add engine and format to command line options, combine with output filename into Output options argument group
-# engines = ['dot','neato','fdp','sfdp','circo','twopi','osage','patchwork']
-engines = ['dot'] # TODO - allow anything, recommend dot or circo
-format = 'svg' # TODO - probably just allow anything, recommend svg or jpg
-for engine in engines:
-   output_filename_final = f"{output_filename}"
-   print(f"Saving to {data_folder}/graphs/{output_filename_final}.{format}")
-   dot.draw(path=f"{data_folder}/graphs/{output_filename_final}.{format}", format=format, prog=engine)
+print(f"Saving to {data_folder}/graphs/{output_filename}.{output_format}")
+dot.draw(path=f"{data_folder}/graphs/{output_filename}.{output_format}", format=output_format, prog=output_engine)
 
 end_time = time.perf_counter()
 execution_time = end_time - start_time
