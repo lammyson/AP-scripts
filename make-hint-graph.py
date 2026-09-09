@@ -262,7 +262,7 @@ if debug:
    print(f"\toutput_engine={output_engine}")
    print("")
 
-   Path(f"{data_folder}/hint_debug").mkdir(parents=True, exist_ok=True)
+   Path(f"{data_folder}/make-hint-graph-debug").mkdir(parents=True, exist_ok=True)
 
 # Validation done. Tell the user what type of hint graph will be created
 action_string: str = "Creating hint"
@@ -304,7 +304,7 @@ for hint_dict in tracker["hints"]:
 high_hint_count_slots = [index + 1 for index, value in enumerate(finding_player_count) if value >= high_hint_count]
 
 if debug:
-   with open(f"{data_folder}/hint_debug/hints_raw_unique.json", "w") as file:
+   with open(f"{data_folder}/make-hint-graph-debug/hints_raw_unique.json", "w") as file:
       json.dump(hints_raw_unique, file, indent=3)
 
 # Create the initial list of hints with 
@@ -355,7 +355,7 @@ for item_link in static_tracker["groups"]:
    ))
 
 if debug:
-   with open(f"{data_folder}/hint_debug/hints_processed_pre.json", "w") as file:
+   with open(f"{data_folder}/make-hint-graph-debug/hints_processed_pre.json", "w") as file:
       json.dump([asdict(hint) for hint in hints_processed], file, indent=3)
 
 # Add hints to hints_processed
@@ -400,7 +400,7 @@ for hint in hints_raw_unique:
    hints_processed[hint.receiving_player].has_hint = True
    hints_processed[hint.finding_player].has_hint = True
 if debug:
-   with open(f"{data_folder}/hint_debug/hints_processed.json", "w") as file:
+   with open(f"{data_folder}/make-hint-graph-debug/hints_processed.json", "w") as file:
       json.dump([asdict(hint) for hint in hints_processed], file, indent=3)
 
 # Create list of nodes to show
