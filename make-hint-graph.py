@@ -63,13 +63,20 @@ def set_node_name(slot_name: str, alias: str | None, is_item_link: bool) -> str:
       node_name = f"{slot_name}"
    return node_name
 
-parser = argparse.ArgumentParser(description="Make a hint graph of a room's hints. Graphs all hints by default.", formatter_class=argparse.RawTextHelpFormatter)
+parser = argparse.ArgumentParser(description="Make a hint graph of a room's hints. Graphs all hints by default.")
 parser.add_argument(
    "-f", "--data-folder",
    required=True,
    type=Path,
    metavar="FOLDER",
-   help="Folder containing room data retrieved by get-room-data.py")
+   help="(Required) Folder containing room data retrieved by get-room-data.py")
+
+parser.add_argument(
+   "-hs", "--highlight-slots",
+   nargs="*",
+   metavar="SLOT",
+   help="List of slot names to highlight in the hint graph"
+)
 parser.add_argument(
    "-o", "--output-filename",
    metavar="FILE",
@@ -80,56 +87,27 @@ parser.add_argument(
    action="store_true",
    help="Print debug"
 )
-# parser.add_argument(
-#    "--slot-names",
-#    nargs="*",
-#    metavar="NAMES",
-#    help="List of slot names to color red in the hint graph"
-# )
 
-# TODO - Add --slot-names option to color multiple slots of interest red
-slot_select_group = parser.add_argument_group(
-   "Slot name options",
-   description=
-"""Use these arguments to select a specific slot/alias.
-Used to highlight a specific slot red.
-When combined with a hint mode option, it will be the slot that the hint chain is centered around."""
-      ).add_mutually_exclusive_group(required=False)
-slot_select_group.add_argument(
-   "--slot-name",
-   metavar="NAME",
-   help="Slot name")
-slot_select_group.add_argument(
-   "--alias",
-   help="Alias of the slot. Must be unique, otherwise use --slot-name or --slot-id")
-slot_select_group.add_argument(
-   "--slot-id",
-   type=int,
-   metavar="ID",
-   help="Id (integer) of the slot. Can be found on the room page")
-
-hint_chain_group = parser.add_argument_group(
-   "Hint chain options",
-   description=
-"""Requires a slot name option.""")
+hint_chain_group = parser.add_argument_group("Hint chain options (optional)")
+hint_chain_group.add_argument(
+   "--hint-chain-slot",
+   metavar="SLOT",
+   help="Slot name of the slot the hint chain will be centered around. Requires one of the --[child-|parent-]depth options")
 hint_chain_group.add_argument(
    "--depth",
    metavar="DEPTH",
    type=int,
-   help="Sets how deep in the hint chain to display in both directions"
-)
-hint_chain_group.add_argument(
-   "--parent-depth",
-   metavar="DEPTH",
-   type=int,
-   help="Sets how deep in the hint chain to display for slots that you depend on"
-)
+   help="Sets how deep in the hint chain to display in both directions. Requires the --hint-chain-slot option")
 hint_chain_group.add_argument(
    "--child-depth",
    metavar="DEPTH",
    type=int,
-   help="Sets how deep in the hint chain to display for slots that depend on you"
-)
+   help="Sets how deep in the hint chain to display for slots that depend on you. Requires the --hint-chain-slot option. Overrides --depth option")
+hint_chain_group.add_argument(
+   "--parent-depth",
+   metavar="DEPTH",
+   type=int,
+   help="Sets how deep in the hint chain to display for slots that you depend on. Requires the --hint-chain-slot option. Overrides --depth option")
 
 args = parser.parse_args()
 debug: bool = args.debug
@@ -137,13 +115,12 @@ debug: bool = args.debug
 if debug:
    print("Just after argument parsing")
    print(f"\tdata-folder={args.data_folder}")
+   print(f"\thighlight-slots={args.highlight_slots}")
    print(f"\toutput-filename={args.output_filename}")
-   print(f"\tslot-name={args.slot_name}")
-   print(f"\talias={args.alias}")
-   print(f"\tslot-id={args.slot_id}")
+   print(f"\thint-chain-slot={args.hint_chain_slot}")
    print(f"\tdepth={args.depth}")
-   print(f"\tparent_depth={args.parent_depth}")
-   print(f"\tchild_depth={args.parent_depth}")
+   print(f"\tchild-depth={args.child_depth}")
+   print(f"\tparent-depth={args.parent_depth}")
    print("")
 
 if not args.data_folder.exists():
@@ -168,10 +145,12 @@ if args.child_depth:
    show_child_nodes = True
    child_depth=args.child_depth
 
-no_depth_option: bool = args.depth == None and args.parent_depth == None and args.child_depth == None
-no_slot_name: bool = args.slot_name == None and args.alias == None and args.slot_id == None
-if not no_depth_option and no_slot_name:
-   parser.error("One of the arguments --slot-name|--alias|--slot-id is required when using --depth|--parent-depth|--child-depth")
+depth_option_provided: bool = args.depth != None or args.parent_depth != None or args.child_depth != None
+hint_chain_slot_provided: bool = args.hint_chain_slot != None
+if depth_option_provided and not hint_chain_slot_provided:
+   parser.error("The --hint-chain-slot argument is required when using --depth|--parent-depth|--child-depth")
+if hint_chain_slot_provided and not depth_option_provided:
+   parser.error("At least one of the --depth|--parent-depth|--child-depth arguments are required when using --hint-chain-slot")
 
 # TODO - Filter out nodes with >= some number of hints to find - Make this configurable
 high_hint_count: int = 2147483647
@@ -188,23 +167,17 @@ with open(f"{data_folder}/static_tracker.json", "r") as file:
 with open(f"{data_folder}/room_datapackages.json", "r") as file:
    room_datapackages = json.load(file) # TODO - Load from shared datapackage cache
 
-# argparse only allows one of slot_id/slot_name/alias to be set so no need to re-validate that here
-
 # Validate slot id if it was provided
-# TODO - support item_links
-slot_id_arg: int | None = args.slot_id
-if slot_id_arg:
-   if slot_id_arg > len(room_status["players"]):
-      parser.error(f"slot_id={slot_id_arg} is greater than the number of players in the room ({len(room_status["players"])})")
+hint_chain_slot_id: int = -1
 
 # Validate slot name if it was provided
 # TODO - support item_links
-slot_name: str | None = args.slot_name
-if slot_name:
-   matches = [[idx, player] for idx, player in enumerate(room_status["players"]) if player[0] == slot_name]
+hint_chain_slot_name: str | None = args.hint_chain_slot
+if hint_chain_slot_name:
+   matches = [[idx, player] for idx, player in enumerate(room_status["players"]) if player[0] == hint_chain_slot_name]
 
    if len(matches) == 0:
-      parser.error(f"slot_name={slot_name} not found. Please check your spelling")
+      parser.error(f"Error parsing --hint-chain-slot. slot_name={hint_chain_slot_name} not found. Please check your spelling")
    elif len(matches) >= 2:
       error_json = []
       for match in matches:
@@ -213,26 +186,30 @@ if slot_name:
             "player": match[0]+1,
             "slot_name": match[1][0]
          })
-      parser.error(f"slot_name={slot_name} found multiple times. This should never happen. Run get-room-info.py to pull fresh data\n\t{error_json}")
+      parser.error(f"Error parsing --hint-chain-slot. slot_name={hint_chain_slot_name} found multiple times. This should never happen. Run get-room-info.py to pull fresh data\n\t{error_json}")
 
-   slot_id_arg = matches[0][0]+1
+   hint_chain_slot_id = matches[0][0]+1
 
-# Validate alias if it was provided
-alias: str | None = args.alias
-if alias:
-   matches = [name for name in tracker["aliases"] if name["alias"] == alias]
+# Validate slot names to highlight exist
+slot_ids_to_highlight: list[int] = []
+highlight_slots: list[str] = args.highlight_slots
+if highlight_slots:
+   for slot in highlight_slots:
+      matches = [[idx, player] for idx, player in enumerate(room_status["players"]) if player[0] == slot]
 
-   if len(matches) == 0:
-      parser.error(f"alias={alias} not found. Please check your spelling")
-   elif len(matches) >= 2: # aliases are not globally unique
-      matches = [{k: v for k, v in d.items() if k != "team"} for d in matches]
-      for match in matches:
-         match["slot_name"] = room_status["players"][match["player"]-1][0]
-      parser.error(f"alias={alias} found multiple times.\n\t{matches}")
+      if len(matches) == 0:
+         parser.error(f"Error parsing --highlight-slots. slot_name={slot} not found. Please check your spelling")
+      elif len(matches) >= 2:
+         error_json = []
+         for match in matches:
+            error_json.append({
+               "alias": tracker["aliases"][match[0]+1]["alias"],
+               "player": match[0]+1,
+               "slot_name": match[1][0]
+            })
+         parser.error(f"Error parsing --highlight-slots. slot_name={slot} found multiple times. This should never happen. Run get-room-info.py to pull fresh data\n\t{error_json}")
 
-   slot_id_arg = matches[0]["player"]
-
-slot_id: int = slot_id_arg # pyright: ignore[reportAssignmentType] - slot_id_arg will always resolve to an int since it will be found by one of the 3 slot name options
+      slot_ids_to_highlight.append(matches[0][0]+1)
 
 # Create output filename
 fetch_time: str = last_fetched["last_fetched"]
@@ -243,10 +220,9 @@ if args.output_filename != None:
 if debug:
    print("Just after argument validation")
    print(f"\tdata-folder={data_folder}")
+   print(f"\thighlight-slots={highlight_slots}")
    print(f"\toutput-filename={output_filename}")
-   print(f"\tslot-name={slot_name}")
-   print(f"\talias={alias}")
-   print(f"\tslot-id={slot_id}")
+   print(f"\thint-chain-slot={hint_chain_slot_name}")
    print(f"\tshow_parent_nodes={show_parent_nodes}")
    print(f"\tparent_depth={parent_depth}")
    print(f"\tshow_child_nodes={show_child_nodes}")
@@ -257,8 +233,8 @@ if debug:
 
 # Validation done. Tell the user what type of hint graph will be created
 action_string: str = "Creating hint"
-if not no_depth_option:
-   action_string += f" chain for slot {room_status["players"][slot_id-1][0]} showing" # pyright: ignore[reportOptionalOperand]
+if depth_option_provided:
+   action_string += f" chain for slot {room_status["players"][hint_chain_slot_id-1][0]} showing" # pyright: ignore[reportOptionalOperand]
    if show_parent_nodes and show_child_nodes:
       action_string += f" parent nodes at depth {parent_depth} and child nodes at depth {child_depth}"
    elif show_parent_nodes:
@@ -267,6 +243,9 @@ if not no_depth_option:
       action_string += f" child nodes at depth {child_depth}"
 else:
    action_string += " graph for the entire multiworld"
+
+if highlight_slots:
+   action_string += f"\n- Also highlighting the following slots: {highlight_slots}"
 
 print(action_string)
 
@@ -394,8 +373,8 @@ if not show_child_nodes and not show_parent_nodes:
 
 # Show nodes that depend on us
 if show_child_nodes:
-   nodes: list[PlayerHints] = [hints_processed[slot_id]]
-   visited_nodes_child: set = set([hints_processed[slot_id].player_num])
+   nodes: list[PlayerHints] = [hints_processed[hint_chain_slot_id]] # pyright: ignore[reportArgumentType, reportCallIssue]
+   visited_nodes_child: set = set([hints_processed[hint_chain_slot_id].player_num]) # pyright: ignore[reportArgumentType, reportCallIssue]
    while nodes and child_depth > 0:
       child_depth -= 1
       current_node = nodes.pop()
@@ -407,8 +386,8 @@ if show_child_nodes:
 
 # Show nodes that we depend on
 if show_parent_nodes:
-   nodes: list[PlayerHints] = [hints_processed[slot_id]]
-   visited_nodes_parent: set = set([hints_processed[slot_id].player_num])
+   nodes: list[PlayerHints] = [hints_processed[hint_chain_slot_id]] # pyright: ignore[reportArgumentType, reportCallIssue]
+   visited_nodes_parent: set = set([hints_processed[hint_chain_slot_id].player_num]) # pyright: ignore[reportArgumentType, reportCallIssue]
    while nodes and parent_depth > 0:
       parent_depth -= 1
       current_node = nodes.pop()
@@ -423,9 +402,10 @@ start_time = time.perf_counter()
 # Create the graph
 dot = pygraphviz.AGraph(directed=True, rankdir='LR')
 
-# If a specific slot was provided, color it red
-if slot_id:
-   dot.add_node(f"{hints_processed[slot_id].player_num}", label=hints_processed[slot_id].node_name, color="red", fillcolor="red", style="filled", fontcolor="white")
+# Highlight nodes if they are called out
+if slot_ids_to_highlight:
+   for slot_id in slot_ids_to_highlight:
+      dot.add_node(f"{hints_processed[slot_id].player_num}", label=hints_processed[slot_id].node_name, color="red", fillcolor="red", style="filled", fontcolor="white")
 
 # Add all hints
 for index in visited_nodes:
