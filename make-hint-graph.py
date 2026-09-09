@@ -72,21 +72,29 @@ parser.add_argument(
    help="(Required) Folder containing room data retrieved by get-room-data.py")
 
 parser.add_argument(
+   "-d", "--debug",
+   default=False,
+   action="store_true",
+   help="Print debug statements and files")
+parser.add_argument(
    "-hs", "--highlight-slots",
    nargs="*",
    metavar="SLOT",
-   help="List of slot names to highlight in the hint graph"
-)
+   help="List of slot names to highlight in the hint graph")
 parser.add_argument(
    "-o", "--output-filename",
    metavar="FILE",
    help="Partial output filename for the graph. Data fetch date and extension are appended. Example: <output-filename>_<fetch-date>.svg")
 parser.add_argument(
-   "-d", "--debug",
+   "--show-entrances",
    default=False,
    action="store_true",
-   help="Print debug"
-)
+   help="Show entrance info in the hint graph. Warning: This can add a lot of bloat to the hint graph")
+parser.add_argument(
+   "--show-goaled-slots",
+   default=False,
+   action="store_true",
+   help="Show goaled slots that have not received their hinted progression items")
 
 hint_chain_group = parser.add_argument_group("Hint chain options (optional)")
 hint_chain_group.add_argument(
@@ -117,11 +125,16 @@ if debug:
    print(f"\tdata-folder={args.data_folder}")
    print(f"\thighlight-slots={args.highlight_slots}")
    print(f"\toutput-filename={args.output_filename}")
+   print(f"\tshow-entrances={args.show_entrances}")
+   print(f"\tshow-goaled-slots={args.show_goaled_slots}")
    print(f"\thint-chain-slot={args.hint_chain_slot}")
    print(f"\tdepth={args.depth}")
    print(f"\tchild-depth={args.child_depth}")
    print(f"\tparent-depth={args.parent_depth}")
    print("")
+
+show_entrances: bool = args.show_entrances
+show_goaled_slots: bool = args.show_goaled_slots
 
 if not args.data_folder.exists():
    parser.error(f"Data folder={args.data_folder} does not exist")
@@ -148,9 +161,9 @@ if args.child_depth:
 depth_option_provided: bool = args.depth != None or args.parent_depth != None or args.child_depth != None
 hint_chain_slot_provided: bool = args.hint_chain_slot != None
 if depth_option_provided and not hint_chain_slot_provided:
-   parser.error("The --hint-chain-slot argument is required when using --depth|--parent-depth|--child-depth")
+   parser.error("The --hint-chain-slot argument is required when using --depth|--child-depth|--parent-depth")
 if hint_chain_slot_provided and not depth_option_provided:
-   parser.error("At least one of the --depth|--parent-depth|--child-depth arguments are required when using --hint-chain-slot")
+   parser.error("At least one of the --depth|--child-depth|--parent-depth arguments are required when using --hint-chain-slot")
 
 # TODO - Filter out nodes with >= some number of hints to find - Make this configurable
 high_hint_count: int = 2147483647
@@ -222,6 +235,8 @@ if debug:
    print(f"\tdata-folder={data_folder}")
    print(f"\thighlight-slots={highlight_slots}")
    print(f"\toutput-filename={output_filename}")
+   print(f"\tshow-entrances={show_entrances}")
+   print(f"\tshow-goaled-slots={show_goaled_slots}")
    print(f"\thint-chain-slot={hint_chain_slot_name}")
    print(f"\tshow_parent_nodes={show_parent_nodes}")
    print(f"\tparent_depth={parent_depth}")
@@ -234,7 +249,7 @@ if debug:
 # Validation done. Tell the user what type of hint graph will be created
 action_string: str = "Creating hint"
 if depth_option_provided:
-   action_string += f" chain for slot {room_status["players"][hint_chain_slot_id-1][0]} showing" # pyright: ignore[reportOptionalOperand]
+   action_string += f" chain for slot {room_status["players"][hint_chain_slot_id-1][0]} showing"
    if show_parent_nodes and show_child_nodes:
       action_string += f" parent nodes at depth {parent_depth} and child nodes at depth {child_depth}"
    elif show_parent_nodes:
@@ -245,7 +260,13 @@ else:
    action_string += " graph for the entire multiworld"
 
 if highlight_slots:
-   action_string += f"\n- Also highlighting the following slots: {highlight_slots}"
+   action_string += f"\n- And highlighting the following slots: {highlight_slots}"
+
+if show_entrances:
+   action_string += f"\n- And showing entrance information"
+
+if show_goaled_slots:
+   action_string += f"\n- And showing goaled slots that have not received their hinted progression items"
 
 print(action_string)
 
@@ -328,9 +349,8 @@ for hint in hints_raw_unique:
    if hint.item_flags & 0x1 != 1:
       continue
 
-   # TODO - If configured to show goaled slots, then skip this check
-   # Skip hints from slots that are goaled
-   if hints_processed[hint.receiving_player].has_goaled:
+   # Skip received hints from slots that are goaled
+   if not show_goaled_slots and hints_processed[hint.receiving_player].has_goaled:
       continue
 
    # Skip slots that have way too many unfound progression hints to find
@@ -373,8 +393,8 @@ if not show_child_nodes and not show_parent_nodes:
 
 # Show nodes that depend on us
 if show_child_nodes:
-   nodes: list[PlayerHints] = [hints_processed[hint_chain_slot_id]] # pyright: ignore[reportArgumentType, reportCallIssue]
-   visited_nodes_child: set = set([hints_processed[hint_chain_slot_id].player_num]) # pyright: ignore[reportArgumentType, reportCallIssue]
+   nodes: list[PlayerHints] = [hints_processed[hint_chain_slot_id]]
+   visited_nodes_child: set = set([hints_processed[hint_chain_slot_id].player_num])
    while nodes and child_depth > 0:
       child_depth -= 1
       current_node = nodes.pop()
@@ -386,8 +406,8 @@ if show_child_nodes:
 
 # Show nodes that we depend on
 if show_parent_nodes:
-   nodes: list[PlayerHints] = [hints_processed[hint_chain_slot_id]] # pyright: ignore[reportArgumentType, reportCallIssue]
-   visited_nodes_parent: set = set([hints_processed[hint_chain_slot_id].player_num]) # pyright: ignore[reportArgumentType, reportCallIssue]
+   nodes: list[PlayerHints] = [hints_processed[hint_chain_slot_id]]
+   visited_nodes_parent: set = set([hints_processed[hint_chain_slot_id].player_num])
    while nodes and parent_depth > 0:
       parent_depth -= 1
       current_node = nodes.pop()
@@ -415,9 +435,8 @@ for index in visited_nodes:
       for hint in player.hints_to_find:
          if hint.finding_player in visited_nodes and hint.receiving_player in visited_nodes:
             label = f"{hint.item_name} at {hint.location_name}"
-            # TODO - Make adding entrance info configurable since it adds a lot to the hint graph
-            # if hint["entrance"]:
-            #    label = f"{label} ({hint["entrance"]})"
+            if hint.entrance and show_entrances:
+               label = f"{label} ({hint.entrance})"
             dot.add_edge(u=f"{hint.finding_player}",
                          v=f"{hint.receiving_player}",
                          label=label)
