@@ -1,7 +1,67 @@
 import argparse
-import graphviz
+from dataclasses import asdict, dataclass
+import enum
+import pygraphviz
 import json
 from pathlib import Path
+from typing import NamedTuple
+import time
+
+# TODO - Split this into 2 scripts
+# - One that processes the raw hints into hints_processed.json
+# - One that reads hints_processed.json and does all the display stuff
+
+# https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#hintstatus
+class HintStatus(enum.IntEnum):
+   HINT_UNSPECIFIED = 0  # The receiving player has not specified any status
+   HINT_NO_PRIORITY = 10 # The receiving player has specified that the item is unneeded
+   HINT_AVOID = 20       # The receiving player has specified that the item is detrimental
+   HINT_PRIORITY = 30    # The receiving player has specified that the item is needed
+   HINT_FOUND = 40       # The location has been collected. Status cannot be changed once found.
+
+# https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#hint
+class Hint(NamedTuple):
+   receiving_player: int
+   finding_player: int
+   location: int
+   item: int
+   found: bool
+   entrance: str = ""
+   item_flags: int = 0
+   status: HintStatus = HintStatus.HINT_UNSPECIFIED
+
+# Internal hint type to make creating the hint graph easier
+class HintProcessed(NamedTuple):
+   finding_player: int
+   receiving_player: int
+   location_id: int
+   location_name: str # Save the location_id lookup
+   item_id: int
+   item_name: str # Save the item_id lookup
+   entrance: str
+
+# Internal hint type to make creating the hint graph easier
+@dataclass
+class PlayerHints:
+   player_num: int
+   slot_name: str
+   game: str
+   alias: str | None
+   has_goaled: bool
+   has_hint: bool
+   is_item_link: bool
+   node_name: str
+   hints_to_find: list[HintProcessed]
+   hints_for_others: list[HintProcessed]
+
+def set_node_name(slot_name: str, alias: str | None, is_item_link: bool) -> str:
+   if alias:
+      node_name = f"{alias} ({slot_name})"
+   elif is_item_link:
+      node_name = f"item_link: {slot_name}"
+   else:
+      node_name = f"{slot_name}"
+   return node_name
 
 parser = argparse.ArgumentParser(description="Make a hint graph of a room's hints. Graphs all hints by default.", formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument(
@@ -20,6 +80,12 @@ parser.add_argument(
    action="store_true",
    help="Print debug"
 )
+# parser.add_argument(
+#    "--slot-names",
+#    nargs="*",
+#    metavar="NAMES",
+#    help="List of slot names to color red in the hint graph"
+# )
 
 # TODO - Add --slot-names option to color multiple slots of interest red
 slot_select_group = parser.add_argument_group(
@@ -35,7 +101,7 @@ slot_select_group.add_argument(
    help="Slot name")
 slot_select_group.add_argument(
    "--alias",
-   help="Alias of the slot")
+   help="Alias of the slot. Must be unique, otherwise use --slot-name or --slot-id")
 slot_select_group.add_argument(
    "--slot-id",
    type=int,
@@ -66,7 +132,7 @@ hint_chain_group.add_argument(
 )
 
 args = parser.parse_args()
-debug=args.debug
+debug: bool = args.debug
 
 if debug:
    print("Just after argument parsing")
@@ -85,10 +151,10 @@ if not args.data_folder.exists():
 if not Path(args.data_folder).is_dir():
    parser.error(f"Data folder={args.data_folder} is not a directory")
 
-show_parent_nodes = False
-show_child_nodes = False
-parent_depth=2147483647
-child_depth=2147483647
+show_parent_nodes: bool = False
+show_child_nodes: bool = False
+parent_depth: int = 2147483647
+child_depth: int = 2147483647
 
 if args.depth:
    show_parent_nodes = True
@@ -102,15 +168,15 @@ if args.child_depth:
    show_child_nodes = True
    child_depth=args.child_depth
 
-no_depth_option = args.depth == None and args.parent_depth == None and args.child_depth == None
-no_slot_name = args.slot_name == None and args.alias == None and args.slot_id == None
+no_depth_option: bool = args.depth == None and args.parent_depth == None and args.child_depth == None
+no_slot_name: bool = args.slot_name == None and args.alias == None and args.slot_id == None
 if not no_depth_option and no_slot_name:
    parser.error("One of the arguments --slot-name|--alias|--slot-id is required when using --depth|--parent-depth|--child-depth")
 
 # TODO - Filter out nodes with >= some number of hints to find - Make this configurable
-high_hint_count = 2147483647
+high_hint_count: int = 2147483647
 
-data_folder = args.data_folder
+data_folder: str = args.data_folder
 with open(f"{data_folder}/last_fetched.json", "r") as s:
    last_fetched = json.load(s)
 with open(f"{data_folder}/room_status.json", "r") as file:
@@ -126,14 +192,14 @@ with open(f"{data_folder}/room_datapackages.json", "r") as file:
 
 # Validate slot id if it was provided
 # TODO - support item_links
-slot_id = args.slot_id
-if slot_id:
-   if slot_id > len(room_status["players"]):
-      parser.error(f"slot_id={slot_id} is greater than the number of players in the room ({len(room_status["players"])})")
+slot_id_arg: int | None = args.slot_id
+if slot_id_arg:
+   if slot_id_arg > len(room_status["players"]):
+      parser.error(f"slot_id={slot_id_arg} is greater than the number of players in the room ({len(room_status["players"])})")
 
 # Validate slot name if it was provided
 # TODO - support item_links
-slot_name = args.slot_name
+slot_name: str | None = args.slot_name
 if slot_name:
    matches = [[idx, player] for idx, player in enumerate(room_status["players"]) if player[0] == slot_name]
 
@@ -149,10 +215,10 @@ if slot_name:
          })
       parser.error(f"slot_name={slot_name} found multiple times. This should never happen. Run get-room-info.py to pull fresh data\n\t{error_json}")
 
-   slot_id = matches[0][0]+1
+   slot_id_arg = matches[0][0]+1
 
 # Validate alias if it was provided
-alias = args.alias
+alias: str | None = args.alias
 if alias:
    matches = [name for name in tracker["aliases"] if name["alias"] == alias]
 
@@ -164,11 +230,13 @@ if alias:
          match["slot_name"] = room_status["players"][match["player"]-1][0]
       parser.error(f"alias={alias} found multiple times.\n\t{matches}")
 
-   slot_id = matches[0]["player"]
+   slot_id_arg = matches[0]["player"]
+
+slot_id: int = slot_id_arg # pyright: ignore[reportAssignmentType] - slot_id_arg will always resolve to an int since it will be found by one of the 3 slot name options
 
 # Create output filename
-fetch_time = last_fetched["last_fetched"]
-output_filename = Path(f"{fetch_time}")
+fetch_time: str = last_fetched["last_fetched"]
+output_filename: Path = Path(f"{fetch_time}")
 if args.output_filename != None:
    output_filename = Path(f"{output_filename}_{args.output_filename}")
 
@@ -185,8 +253,10 @@ if debug:
    print(f"\tchild_depth={child_depth}")
    print("")
 
+   Path(f"{data_folder}/hint_debug").mkdir(parents=True, exist_ok=True)
+
 # Validation done. Tell the user what type of hint graph will be created
-action_string = "Creating hint"
+action_string: str = "Creating hint"
 if not no_depth_option:
    action_string += f" chain for slot {room_status["players"][slot_id-1][0]} showing" # pyright: ignore[reportOptionalOperand]
    if show_parent_nodes and show_child_nodes:
@@ -201,182 +271,187 @@ else:
 print(action_string)
 
 # Flatten all the tracker["hints"][idx]["hints"] into a single list of dicts while getting rid of dupes
-# https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/network%20protocol.md#hint
-finding_player_count = [0] * (len(static_tracker["player_game"]) + len(static_tracker["groups"]))
-hints_raw = []
+finding_player_count = [0] * (len(static_tracker["player_game"]) + len(static_tracker["groups"]) + 1) # Add 1 for the special Archipelago slot at slot 0
+hints_raw_unique: list[Hint] = []
 for hint_dict in tracker["hints"]:
-   for hint in hint_dict["hints"]:
-      if hint not in hints_raw:
-         hints_raw.append(hint)
+   for h in hint_dict["hints"]:
+      hint = Hint._make(h)
+      if hint not in hints_raw_unique:
+         hints_raw_unique.append(hint)
 
          # Count how many unfound progression hints a slot has been hinted to find
-         if hint[4] == False and (hint[6] & 0x1 == 1):
-            finding_player_count[hint[1]-1] += 1
+         if hint.found == False and (hint.item_flags & 0x1 == 1):
+            finding_player_count[hint.finding_player] += 1
 high_hint_count_slots = [index + 1 for index, value in enumerate(finding_player_count) if value >= high_hint_count]
 
-hints_raw = [
-   {
-      "receiving_player": hint[0], # int
-      "finding_player": hint[1],   # int
-      "location": hint[2],         # int
-      "item": hint[3],             # int
-      "found": hint[4],            # bool
-      "entrance": hint[5],         # str = ""
-      "item_flags": hint[6],       # int = 0
-      "status": hint[7]            # HintStatus = HintStatus.HINT_UNSPECIFIED
-   }
-   for hint in hints_raw
-]
 if debug:
-   with open(f"{data_folder}/hints_raw_unique.json", "w") as file:
-      json.dump(hints_raw, file, indent=3)
+   with open(f"{data_folder}/hint_debug/hints_raw_unique.json", "w") as file:
+      json.dump(hints_raw_unique, file, indent=3)
 
-# Create an initial list of hints_processed
-hints_processed = [
-   {
-      "player_num": tracker["aliases"][idx]["player"],
-      "slot_name": slot_name[0],
-      "game": slot_name[1],
-      "alias": tracker["aliases"][idx]["alias"],
-      "goal": tracker["player_status"][idx]["status"] == 30,
-      "hints_to_find": [],
-      "hints_for_others": [],
-      "has_hint": False,
-      "is_item_link": False
-   }
-   for (idx, slot_name) in enumerate(room_status["players"])
-]
+# Create the initial list of hints with 
+hints_processed: list[PlayerHints] = []
 
-# Add item_links as their own slot
+# Add the special Archipelago slot (also makes indexing 0-based yay!)
+hints_processed.append(PlayerHints(
+   player_num = 0,
+   slot_name = "Archipelago",
+   game = "Archipelago",
+   alias = None,
+   has_goaled = True,
+   hints_to_find = [],
+   hints_for_others = [],
+   has_hint = False,
+   is_item_link = False,
+   node_name = "Archipelago"
+))
+
+# Add the normal slots
+for (idx, slot_name_local) in enumerate(room_status["players"]):
+   hints_processed.append(PlayerHints(
+      player_num = tracker["aliases"][idx]["player"],
+      slot_name = slot_name_local[0],
+      game = slot_name_local[1],
+      alias = tracker["aliases"][idx]["alias"],
+      has_goaled = tracker["player_status"][idx]["status"] == 30,
+      hints_to_find = [],
+      hints_for_others = [],
+      has_hint = False,
+      is_item_link = False,
+      node_name = set_node_name(slot_name=slot_name_local[0], alias=tracker["aliases"][idx]["alias"], is_item_link=False)
+   ))
+
+# Add item_links slots
 for item_link in static_tracker["groups"]:
-   hints_processed.append({
-      "player_num": item_link["slot"],
-      "slot_name": item_link["name"],
-      "game": hints_processed[item_link["members"][0]-1]["game"],
-      "alias": None,
-      "goal": False,
-      "hints_to_find": [],
-      "hints_for_others": [],
-      "has_hint": False,
-      "is_item_link": True
-   })
+   hints_processed.append(PlayerHints(
+      player_num = item_link["slot"],
+      slot_name = item_link["name"],
+      game = hints_processed[item_link["members"][0]-1].game,
+      alias = None,
+      has_goaled = False,
+      hints_to_find = [],
+      hints_for_others = [],
+      has_hint = False,
+      is_item_link = True,
+      node_name = set_node_name(slot_name=item_link["name"], alias=None, is_item_link=True)
+   ))
 
-# Set the pretty node names for later
-for hint_datum in hints_processed:
-   if hint_datum["alias"]:
-      node_name = f"{hint_datum["alias"]} ({hint_datum["slot_name"]})"
-   elif hint_datum["is_item_link"]:
-      node_name = f"item_link: {hint_datum["slot_name"]}"
-   else:
-      node_name = f"{hint_datum["slot_name"]}"
-   hint_datum["node_name"] = node_name
 if debug:
-   with open(f"{data_folder}/hints_processed_pre.json", "w") as file:
-      json.dump(hints_processed, file, indent=3)
+   with open(f"{data_folder}/hint_debug/hints_processed_pre.json", "w") as file:
+      json.dump([asdict(hint) for hint in hints_processed], file, indent=3)
 
 # Add hints to hints_processed
-for hint in hints_raw:
-   hints_to_find = []
-
+for hint in hints_raw_unique:
    # Skip hints that were found
-   if hint["found"] == True:
+   if hint.found == True:
       continue
 
    # Skip non-progression hints
-   if hint["item_flags"] & 0x1 != 1:
+   if hint.item_flags & 0x1 != 1:
       continue
 
-   if hint["finding_player"] in high_hint_count_slots:
+   # TODO - If configured to show goaled slots, then skip this check
+   # Skip hints from slots that are goaled
+   if hints_processed[hint.receiving_player].has_goaled:
       continue
 
-   location = [k for k, v in room_datapackages[hints_processed[hint["finding_player"]-1]["game"]]["location_name_to_id"].items() if v == hint["location"]]
-   item = [k for k, v in room_datapackages[hints_processed[hint["receiving_player"]-1]["game"]]["item_name_to_id"].items() if v == hint["item"]]
+   # Skip slots that have way too many unfound progression hints to find
+   if hint.finding_player in high_hint_count_slots:
+      continue
 
-   hints_processed[hint["finding_player"]-1]["hints_to_find"].append({
-      "finding_player": hint["finding_player"],
-      "receiving_player": hint["receiving_player"],
-      "location_id": hint["location"],
-      "location_name": location[0],
-      "item_id": hint["item"],
-      "item_name": item[0],
-      "entrance": hint["entrance"]
-   })
-   hints_processed[hint["receiving_player"]-1]["hints_for_others"].append({
-      "finding_player": hint["finding_player"],
-      "receiving_player": hint["receiving_player"],
-      "location_id": hint["location"],
-      "location_name": location[0],
-      "item_id": hint["item"],
-      "item_name": item[0],
-      "entrance": hint["entrance"]
-   })
-   hints_processed[hint["receiving_player"]-1]["has_hint"] = True
-   hints_processed[hint["finding_player"]-1]["has_hint"] = True
+   location = [k for k, v in room_datapackages[hints_processed[hint.finding_player].game]["location_name_to_id"].items() if v == hint.location]
+   item = [k for k, v in room_datapackages[hints_processed[hint.receiving_player].game]["item_name_to_id"].items() if v == hint.item]
+
+   hints_processed[hint.finding_player].hints_to_find.append(HintProcessed(
+      finding_player = hint.finding_player,
+      receiving_player = hint.receiving_player,
+      location_id = hint.location,
+      location_name = location[0],
+      item_id = hint.item,
+      item_name = item[0],
+      entrance = hint.entrance
+   ))
+   hints_processed[hint.receiving_player].hints_for_others.append(HintProcessed(
+      finding_player = hint.finding_player,
+      receiving_player = hint.receiving_player,
+      location_id = hint.location,
+      location_name = location[0],
+      item_id = hint.item,
+      item_name = item[0],
+      entrance = hint.entrance
+   ))
+   hints_processed[hint.receiving_player].has_hint = True
+   hints_processed[hint.finding_player].has_hint = True
 if debug:
-   with open(f"{data_folder}/hints_processed.json", "w") as file:
-      json.dump(hints_processed, file, indent=3)
+   with open(f"{data_folder}/hint_debug/hints_processed.json", "w") as file:
+      json.dump([asdict(hint) for hint in hints_processed], file, indent=3)
 
-visited_nodes: set = set()
+# Create list of nodes to show
+visited_nodes: set[int] = set()
 
 # Show all nodes if we're not looking for a specific chain
 if not show_child_nodes and not show_parent_nodes:
-   visited_nodes.update([node["player_num"] for node in hints_processed])
+   visited_nodes.update([node.player_num for node in hints_processed])
 
 # Show nodes that depend on us
 if show_child_nodes:
-   nodes: list = [hints_processed[slot_id-1]] # pyright: ignore[reportOptionalOperand]
-   visited_nodes_child: set = set([hints_processed[slot_id-1]["player_num"]]) # pyright: ignore[reportOptionalOperand] # 1 based index into hints_processed
+   nodes: list[PlayerHints] = [hints_processed[slot_id]]
+   visited_nodes_child: set = set([hints_processed[slot_id].player_num])
    while nodes and child_depth > 0:
       child_depth -= 1
       current_node = nodes.pop()
-      for hint in current_node["hints_to_find"]:
-         if hint["receiving_player"] not in visited_nodes_child:
-            visited_nodes_child.add(hint["receiving_player"])
-            nodes.append(hints_processed[hint["receiving_player"]-1])
+      for hint in current_node.hints_to_find:
+         if hint.receiving_player not in visited_nodes_child:
+            visited_nodes_child.add(hint.receiving_player)
+            nodes.append(hints_processed[hint.receiving_player])
    visited_nodes.update(visited_nodes_child)
 
 # Show nodes that we depend on
 if show_parent_nodes:
-   nodes: list = [hints_processed[slot_id-1]] # pyright: ignore[reportOptionalOperand]
-   visited_nodes_parent: set = set([hints_processed[slot_id-1]["player_num"]]) # pyright: ignore[reportOptionalOperand]
+   nodes: list[PlayerHints] = [hints_processed[slot_id]]
+   visited_nodes_parent: set = set([hints_processed[slot_id].player_num])
    while nodes and parent_depth > 0:
       parent_depth -= 1
       current_node = nodes.pop()
-      for hint in current_node["hints_for_others"]:
-         if hint["finding_player"] not in visited_nodes_parent:
-            visited_nodes_parent.add(hint["finding_player"])
-            nodes.append(hints_processed[hint["finding_player"]-1])
+      for hint in current_node.hints_for_others:
+         if hint.finding_player not in visited_nodes_parent:
+            visited_nodes_parent.add(hint.finding_player)
+            nodes.append(hints_processed[hint.finding_player])
    visited_nodes.update(visited_nodes_parent)
 
+start_time = time.perf_counter()
+
 # Create the graph
-dot = graphviz.Digraph('hint-graph', graph_attr={'rankdir':'LR'})
+dot = pygraphviz.AGraph(directed=True, rankdir='LR')
 
 # If a specific slot was provided, color it red
 if slot_id:
-   dot.node(f"{hints_processed[slot_id-1]["player_num"]}", hints_processed[slot_id-1]["node_name"], color="red", fillcolor="red", style="filled", fontcolor="white")
+   dot.add_node(f"{hints_processed[slot_id].player_num}", label=hints_processed[slot_id].node_name, color="red", fillcolor="red", style="filled", fontcolor="white")
 
 # Add all hints
 for index in visited_nodes:
-   player = hints_processed[index-1]
-   if player["has_hint"]:
-      dot.node(f"{player["player_num"]}", player["node_name"])
-      for hint in player["hints_to_find"]:
-         if hint["finding_player"] in visited_nodes and hint["receiving_player"] in visited_nodes:
-            label = f"{hint["item_name"]} at {hint["location_name"]}"
+   player = hints_processed[index]
+   if player.has_hint:
+      dot.add_node(f"{player.player_num}", label=player.node_name)
+      for hint in player.hints_to_find:
+         if hint.finding_player in visited_nodes and hint.receiving_player in visited_nodes:
+            label = f"{hint.item_name} at {hint.location_name}"
             # TODO - Make adding entrance info configurable since it adds a lot to the hint graph
             # if hint["entrance"]:
             #    label = f"{label} ({hint["entrance"]})"
-            dot.edge(tail_name=f"{hint["finding_player"]}",
-                     head_name=f"{hint["receiving_player"]}",
-                     label=label)
+            dot.add_edge(u=f"{hint.finding_player}",
+                         v=f"{hint.receiving_player}",
+                         label=label)
 
 # Save it!
 # TODO - Add engine and format to command line options, combine with output filename into Output options argument group
 # engines = ['dot','neato','fdp','sfdp','circo','twopi','osage','patchwork']
-engines = ['dot'] # TODO - allow anything, recommend dot, neato, or circo
+engines = ['dot'] # TODO - allow anything, recommend dot or circo
 format = 'svg' # TODO - probably just allow anything, recommend svg or jpg
 for engine in engines:
    output_filename_final = f"{output_filename}"
-   dot.engine = engine
    print(f"Saving to {data_folder}/graphs/{output_filename_final}.{format}")
-   dot.render(filename=f"{output_filename_final}", directory=f"{data_folder}/graphs", format=format)
+   dot.draw(path=f"{data_folder}/graphs/{output_filename_final}.{format}", format=format, prog=engine)
+
+end_time = time.perf_counter()
+execution_time = end_time - start_time
+print(f"Hint graph creation took {execution_time:.6f} seconds to run")

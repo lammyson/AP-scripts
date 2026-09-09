@@ -95,6 +95,14 @@ static_tracker = download_api_single(
    endpoint=f"/static_tracker/{tracker_suuid}",
    output_folder=output_folder)
 
+# TODO - do we care about this for anything?
+# /slot_data_tracker/<suuid:tracker> - https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/webhost%20api.md#slot_data_trackersuuidtracker
+# Cache timer: 300 seconds
+slot_data_tracker = download_api_single(
+   api_name="slot_data_tracker",
+   endpoint=f"/slot_data_tracker/{tracker_suuid}",
+   output_folder=output_folder)
+
 # /datapackage/<string:checksum> - https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/webhost%20api.md#datapackagestringchecksum
 # Cache timer: None
 room_datapackages = download_room_datapackages(
@@ -109,9 +117,9 @@ with open(f"{output_folder}/tracker.json", "w") as file:
    json.dump(tracker, file, indent=indent)
 with open(f"{output_folder}/static_tracker.json", "w") as file:
    json.dump(static_tracker, file, indent=indent)
+with open(f"{output_folder}/slot_data_tracker.json", "w") as file:
+   json.dump(slot_data_tracker, file, indent=indent)
 with open(f"{output_folder}/room_datapackages.json", "w") as file:
    json.dump(room_datapackages, file, indent=indent)
 with open(f"{output_folder}/last_fetched.json", "w") as file:
    json.dump({"last_fetched": datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")}, file, indent=indent)
-
-# TODO - Look at some of the other API endpoints

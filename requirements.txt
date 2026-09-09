@@ -1,5 +1,9 @@
+# This requires installing graphviz and libgraphviz
+# sudo apt install graphviz libgraphviz-dev
+--no-binary=pygraphviz
+
 argparse==1.4.0
 datetime==6.0
-graphviz==0.21
 pathlib==1.0.1
+pygraphviz==2.0.1
 requests==2.34.2
