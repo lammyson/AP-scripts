@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 @dataclass
 class GoalData():
     player: str | None = None
@@ -20,7 +19,6 @@ class GoalData():
     legendary_hunt_catch: bool | None = None
     legendary_hunt_count: int | None = None
     allowed_legendary_hunt_encounters: list[str] | None = None
-
 
 class PokemonEmerald():
     @staticmethod
@@ -64,47 +62,48 @@ class PokemonEmerald():
                 return "Unknown requirement"
 
 
-parser = argparse.ArgumentParser(description="Output goal data in a more human readable format. Requires the room data from get-room-data.py")
-parser.add_argument(
-    "-f", "--data-folder",
-    required=True,
-    type=Path,
-    metavar="FOLDER",
-    help="(Required) Folder containing room data retrieved by get-room-data.py")
-args = parser.parse_args()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Output goal data in a more human readable format. Requires the room data from get-room-data.py")
+    parser.add_argument(
+        "-f", "--data-folder",
+        required=True,
+        type=Path,
+        metavar="FOLDER",
+        help="(Required) Folder containing room data retrieved by get_room_data.py")
+    args = parser.parse_args()
 
-if not args.data_folder.exists():
-    parser.error(f"Data folder={args.data_folder} does not exist")
-if not Path(args.data_folder).is_dir():
-    parser.error(f"Data folder={args.data_folder} is not a directory")
+    if not args.data_folder.exists():
+        parser.error(f"Data folder={args.data_folder} does not exist")
+    if not Path(args.data_folder).is_dir():
+        parser.error(f"Data folder={args.data_folder} is not a directory")
 
-data_folder: str = args.data_folder
-with open(f"{data_folder}/room_status.json", "r") as file:
-    room_status: dict[str, Any] = json.load(file)
-with open(f"{data_folder}/slot_data_tracker.json", "r") as file:
-    slot_data: list[dict[str, Any]] = json.load(file)
+    data_folder: str = args.data_folder
+    with open(f"{data_folder}/room_status.json", "r") as file:
+        room_status: dict[str, Any] = json.load(file)
+    with open(f"{data_folder}/slot_data_tracker.json", "r") as file:
+        slot_data: list[dict[str, Any]] = json.load(file)
 
-# Go through each slot and parse the relevant goal data for each game
-goal_data: list[GoalData] = []
-for idx, slot in enumerate(slot_data):
-    goal: GoalData = GoalData()
-    goal.player = room_status["players"][slot["player"]-1][0]
-    goal.game = room_status["players"][slot["player"]-1][1]
+    # Go through each slot and parse the relevant goal data for each game
+    goal_data: list[GoalData] = []
+    for idx, slot in enumerate(slot_data):
+        goal: GoalData = GoalData()
+        goal.player = room_status["players"][slot["player"]-1][0]
+        goal.game = room_status["players"][slot["player"]-1][1]
 
-    match goal.game:
-        case "Pokemon Emerald":
-            PokemonEmerald.ParseGoalData(slot=slot, goal=goal)
-        case _:
-            goal.log = f"Unsupported game {goal.game}"
+        match goal.game:
+            case "Pokemon Emerald":
+                PokemonEmerald.ParseGoalData(slot=slot, goal=goal)
+            case _:
+                goal.log = f"Unsupported game {goal.game}"
 
-    goal_data.append(goal)
+        goal_data.append(goal)
 
-# Remove all empty or None fields and convert to list[dict[str,Any]]
-goal_data_list_filtered = [
-    {k: v for k, v in asdict(d).items() if v is not None and v != "" and v != [] and v != {}}
-    for d in goal_data
-]
+    # Remove all empty or None fields and convert to list[dict[str,Any]]
+    goal_data_list_filtered = [
+        {k: v for k, v in asdict(d).items() if v is not None and v != "" and v != [] and v != {}}
+        for d in goal_data
+    ]
 
-with open(f"{data_folder}/goal_data.json", "w") as file:
-    json.dump(goal_data_list_filtered, file, indent=3)
-print(f"Saved goal data to to {data_folder}/goal_data.json")
+    with open(f"{data_folder}/goal_data.json", "w") as file:
+        json.dump(goal_data_list_filtered, file, indent=3)
+    print(f"Saved goal data to to {data_folder}/goal_data.json")
