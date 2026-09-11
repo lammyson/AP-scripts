@@ -3,7 +3,7 @@
 Just some scripts to help me learn python. Used to look at Archipelago data
 
 [`get-room-data.py`](get-room-data.py) - Gets data for an Archipelago room and stores to json  
-[`make-hint-graph.py`](make-hint-graph.py) - Make a hint graph using the room data from above. Has a good number of options to show the data in different ways
+[`make-hint-graph.py`](make-hint-graph.py) - Make a hint graph using the room data from above. Has a good number of options to show the data in different ways  
 [`create-goal-data.py`](create-goal-data.py) - Parses room data and outputs relevant goal data. Only support Pokemon Emerald for now
 
 
