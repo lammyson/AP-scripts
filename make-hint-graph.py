@@ -191,8 +191,8 @@ if hint_chain_slot_provided and not depth_option_provided:
 high_hint_count: int = 2147483647
 
 data_folder: str = args.data_folder
-with open(f"{data_folder}/last_fetched.json", "r") as s:
-    last_fetched = json.load(s)
+with open(f"{data_folder}/last_fetched.json", "r") as file:
+    last_fetched = json.load(file)
 with open(f"{data_folder}/room_status.json", "r") as file:
     room_status = json.load(file)
 with open(f"{data_folder}/tracker.json", "r") as file:
@@ -200,7 +200,7 @@ with open(f"{data_folder}/tracker.json", "r") as file:
 with open(f"{data_folder}/static_tracker.json", "r") as file:
     static_tracker = json.load(file)
 with open(f"{data_folder}/room_datapackages.json", "r") as file:
-    room_datapackages = json.load(file) # TODO - Load from shared datapackage cache
+    room_datapackages = json.load(file)  # TODO - Load from shared datapackage cache
 
 # Validate slot id if it was provided
 hint_chain_slot_id: int = -1
@@ -305,7 +305,7 @@ for hint_dict in tracker["hints"]:
             hints_raw_unique.append(hint)
 
             # Count how many unfound progression hints a slot has been hinted to find
-            if hint.found == False and (hint.item_flags & 0x1 == 1):
+            if not hint.found and (hint.item_flags & 0x1 == 1):
                 finding_player_count[hint.finding_player] += 1
 high_hint_count_slots = [index + 1 for index, value in enumerate(finding_player_count) if value >= high_hint_count]
 
@@ -442,8 +442,6 @@ if show_parent_nodes:
                 nodes.append(hints_processed[hint.finding_player])
     visited_nodes.update(visited_nodes_parent)
 
-start_time = time.perf_counter()
-
 # Create the graph
 dot = pygraphviz.AGraph(directed=True, rankdir='LR')
 
@@ -468,8 +466,11 @@ for index in visited_nodes:
 
 # Save it!
 print(f"Saving to {data_folder}/graphs/{output_filename}.{output_format}")
-dot.draw(path=f"{data_folder}/graphs/{output_filename}.{output_format}", format=output_format, prog=output_engine)
+Path(f"{data_folder}/graphs").mkdir(parents=True, exist_ok=True)
 
+start_time = time.perf_counter()
+dot.draw(path=f"{data_folder}/graphs/{output_filename}.{output_format}", format=output_format, prog=output_engine)
 end_time = time.perf_counter()
+
 execution_time = end_time - start_time
 print(f"Hint graph creation took {execution_time:.6f} seconds to run")

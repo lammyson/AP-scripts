@@ -1,0 +1,15 @@
+# These packages are required for building pygraphviz from source
+# build-essential graphviz libgraphviz-dev
+
+# This is here because the version of libfontconfig that comes with pygraphviz
+# is really old and prints warnings when it reads the system libfontconfig files
+#
+# Building pygraphviz from source also makes it faster if you have a recent compiler
+# Some rough numbers on my machine improved the time for creating a hint graph from 7 seconds to 5 seconds
+--no-binary=pygraphviz
+
+argparse>=1.4.0
+datetime>=6.0
+pathlib>=1.0.1
+pygraphviz>=2.0.1
+requests>=2.34.2

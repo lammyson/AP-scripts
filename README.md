@@ -6,19 +6,36 @@ Just some scripts to help me learn python. Used to look at Archipelago data
 [`make-hint-graph.py`](make-hint-graph.py) - Make a hint graph using the room data from above. Has a good number of options to 
 
 # Setup
+### First time setup
 ```bash
-# First time setup
+# Linux only. Look up your specific package manager if you don't use apt
+sudo apt install build-essential graphviz libgraphviz-dev
 
-# Install some packages that are used by the hint graph script
-sudo apt install graphviz libgraphviz-dev
-
-# Setup a python virtual environment
+# Create a python virtual environment
 python -m venv .venv
-pip install -r requirements.txt
-source .venv/bin/activate
+
+# Start the virtual environment
+source .venv/bin/activate # bash
+.\.venv\Scripts\Activate.ps1 # powershell
+
+# Upgrade pip
+pip install --upgrade pip
+
+# Install python depedencies. Use the file that matches your OS
+# Note: mac os is untested. Try using requirements_windows.txt for mac os
+pip install -r requirements_linux.txt
+pip install -r requirements_windows.txt
 ```
 
+### Every time you open a new terminal after the first time setup is complete
 ```bash
-# After first time setup is complete and opening a new terminal
-source .venv/bin/activate
+source .venv/bin/activate # bash
+.\.venv\Scripts\Activate.ps1 # powershell
+```
+
+# Run
+Run each python script with the `-h` or `--help` argument to see what you can do. Example below
+```bash
+python get-room-data.py --help
+# A bunch of text will follow explaining what the script does and how to use it
 ```
