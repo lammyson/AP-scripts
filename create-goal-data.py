@@ -24,7 +24,7 @@ class GoalData():
 
 class PokemonEmerald():
     @staticmethod
-    def ParseGoalData(slot: dict[str,Any], goal: GoalData):
+    def ParseGoalData(slot: dict[str, Any], goal: GoalData):
         goal.goal = PokemonEmerald.goal_to_string(slot["slot_data"]["goal"])
         match goal.goal:
             case "champion" | "steven":
@@ -80,9 +80,9 @@ if not Path(args.data_folder).is_dir():
 
 data_folder: str = args.data_folder
 with open(f"{data_folder}/room_status.json", "r") as file:
-    room_status: dict[str,Any] = json.load(file)
+    room_status: dict[str, Any] = json.load(file)
 with open(f"{data_folder}/slot_data_tracker.json", "r") as file:
-    slot_data: list[dict[str,Any]] = json.load(file)
+    slot_data: list[dict[str, Any]] = json.load(file)
 
 # Go through each slot and parse the relevant goal data for each game
 goal_data: list[GoalData] = []
