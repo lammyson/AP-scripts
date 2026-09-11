@@ -71,7 +71,7 @@ def set_node_name(slot_name: str, alias: str | None, is_item_link: bool) -> str:
     return node_name
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Create a hint graph of a room's hints. Graphs all hints by default.")
     parser.add_argument(
         "-f", "--data-folder",
@@ -473,8 +473,8 @@ if __name__ == "__main__":
                     if hint.entrance and show_entrances:
                         label = f"{label} ({hint.entrance})"
                     dot.add_edge(u=f"{hint.finding_player}",
-                                v=f"{hint.receiving_player}",
-                                label=label)
+                                 v=f"{hint.receiving_player}",
+                                 label=label)
 
     # Save it!
     print(f"Saving to {data_folder}/graphs/{output_filename}.{output_format}")
@@ -486,3 +486,6 @@ if __name__ == "__main__":
 
     execution_time = end_time - start_time
     print(f"Hint graph creation took {execution_time:.6f} seconds to run")
+
+if __name__ == "__main__":
+    main()

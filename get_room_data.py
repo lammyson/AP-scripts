@@ -5,6 +5,7 @@ from pathlib import Path
 import requests
 from typing import Any
 
+
 def __download_from_endpoint(
         api_name: str,
         endpoint: str) -> dict[str, Any]:
@@ -19,11 +20,12 @@ def __download_from_endpoint(
     data = requests.get(f"https://archipelago.gg/api/{endpoint}").json()
     return data
 
+
 def get_file_safe_name(name: str) -> str:
     return "".join(c for c in name if c not in '<>:"/\\|?*')
 
 
-if __name__ == "__main__":
+def main():
     # Parse arguments
     parser = argparse.ArgumentParser(description="Downloads data from an Archipelago room")
     parser.add_argument(
@@ -121,3 +123,6 @@ if __name__ == "__main__":
     with open(f"{output_folder}/last_fetched.json", "w") as file:
         json.dump(last_fetched_json, file)
         print(f"Wrote last_fetched to {output_folder}/last_fetched.json")
+
+if __name__ == "__main__":
+    main()

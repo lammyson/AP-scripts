@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+
 @dataclass
 class GoalData():
     player: str | None = None
@@ -19,6 +20,7 @@ class GoalData():
     legendary_hunt_catch: bool | None = None
     legendary_hunt_count: int | None = None
     allowed_legendary_hunt_encounters: list[str] | None = None
+
 
 class PokemonEmerald():
     @staticmethod
@@ -62,7 +64,7 @@ class PokemonEmerald():
                 return "Unknown requirement"
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Output goal data in a more human readable format. Requires the room data from get-room-data.py")
     parser.add_argument(
         "-f", "--data-folder",
@@ -107,3 +109,6 @@ if __name__ == "__main__":
     with open(f"{data_folder}/goal_data.json", "w") as file:
         json.dump(goal_data_list_filtered, file, indent=3)
     print(f"Saved goal data to to {data_folder}/goal_data.json")
+
+if __name__ == "__main__":
+    main()
